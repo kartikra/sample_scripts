@@ -1,0 +1,217 @@
+db.studentEnrollment.aggregate([
+    { $group: {
+        _id: { student: "$UID" },
+         total_units: { $sum:"$Units" },
+        total_courses: { $sum: 1 }
+    }}]
+    , function(err, result){
+        console.log(result);
+    }
+);
+
+
+Results :
+
+{ "_id" : { "student" : 56782 }, "units" : 3, "count" : 1 }
+{ "_id" : { "student" : 12390 }, "units" : 4, "count" : 2 }
+{ "_id" : { "student" : 39685 }, "units" : 6, "count" : 2 }
+{ "_id" : { "student" : 96540 }, "units" : 2, "count" : 1 }
+{ "_id" : { "student" : 67849 }, "units" : 6, "count" : 2 }
+{ "_id" : { "student" : 23456 }, "units" : 8, "count" : 3 }
+
+
+
+REGEX and Pattern matching:-
+
+starts with K
+Ending with k
+
+use pattern without regex
+
+Top 5
+Last 5
+
+
+
+db.student.find({"name.firstName":{$regex:/^K/}}).pretty();
+db.student.find({"name.firstName":{$regex:/k$/}}).pretty();
+
+db.student.find({"name.firstName": /^K/}).pretty();
+db.student.find({"name.firstName":{$regex:/^K/,$options:'i'}}).pretty();
+
+db.menu_items.find().limit(5)
+db.menu_items.find().sort({$natural:-1}).limit(5)
+
+
+
+
+Map Reduce:-
+
+db.studentEnrollment.mapReduce(
+                               function() { emit (this.UID, this.grade_score); },
+                               function(key, values) { return Array.sum(values) },
+                               {
+                                      query:{level:"graduate"},
+                                       out:"TotalUnits"
+                               }
+)
+
+
+
+db.studentEnrollment.aggregate([
+    { $group: {
+        _id: { student: '$owner_id', car_id: '$car_id' }
+    }},
+    { $group: {
+        _id: '$_id.owner_id',
+        cars_owned: { $sum: 1 }
+    }},
+    { $project: {
+        _id: 0,
+        owner_id: '$_id',
+        cars_owned: 1
+    }}]
+    , function(err, result){
+        console.log(result);
+    }
+);
+
+
+#---------------  Databases --------------------#
+show dbs;
+use university;
+db.dropDatabase();
+
+
+#---------------  Insert Document --------------------#
+db.student_enrollment.insert({	"name":{firstName:"Kartik", lastName:"Ramasubramanian"}, "SSN":"123121234","DOB": ISODate('1982-05-01'),  "level": "graduate", "school" : "Business",	"program": "MBA",	"year": 2016,	"semester": "fall",	"course_id": "237", "Units": 3, "assignment_scores":[10,5,3,5,6], "exam" : {"Mid Term":75,"Final":64},	"letter grade": "A-",	"grade score": 3.67});
+db.student_enrollment.find().pretty();
+
+
+#---------------  Collections --------------------#
+#  max = max no of documents allowed, size=size limitation on collection
+
+show collections;
+db.createCollection("course");
+db.courses.drop();
+
+db.createCollection("course", {capped:true, autoIndexID:false, size: 128000000, max:5000});
+db.createCollection("student", {autoIndexID:false});
+db.createCollection("student_enrollment");
+
+db.student_enrollment.stats();
+ 
+ 
+#--------------- CRUD operations --------------------#
+
+ load("/home/krama/Documents/mongo_scripts/studentEnrollment.js")
+
+
+db.student.find({"name.firstName":"Kartik"}).pretty();
+
+db.student.find({"enrolment year":{$eq:2014}}).pretty();
+
+db.student.find({"enrolment year":{$lt:2014}}).pretty();
+db.student.find({"enrolment year":{$gt:2014}}).pretty();
+
+
+------------------------------------------------------------------------------
+    Other query operators
+------------------------------------------------------------------------------
+db.course.find({"units":{$lt:2}}).pretty();
+db.course.find({"units":{$gt:2}}).pretty();
+db.course.find({"units":{$lte:2}}).pretty();
+db.course.find({"units":{$gte:2}}).pretty();
+db.course.find({"units":{$ne:2}}).pretty();
+
+db.studentEnrollment.find({"assignment_scores":{$in:[8]}}).pretty();
+db.studentEnrollment.find({"assignment_scores":{$nin:[10]}}).pretty();
+db.studentEnrollment.find({"assignment_scores":{$exists:true, $nin:[10]}}).pretty();
+
+
+db.course.update({"code":"MBA237.2"}, {$set:{"credits":2}},{upsert:true});
+db.course.update({"code":" MBA237.2"}, {$set:{"Instructor".2:"XYZ"}});
+
+
+
+
+
+#--------------- Indexing --------------------#
+db.course.getIndexes();
+
+db.course.createIndex({courseId:1});
+db.course.dropIndex({courseId:1});
+
+db.course.createIndex({year:1, semester:-1});           1=asc   -1=dsc
+
+
+db.course.find({_id: ObjectId("57891cd974c7e2b8f7f6a6db")}).explain("executionStats");
+db.course.find({code: "MBA237.2"}).explain("executionStats");
+                                                           -- looking at "docsExamined" : 3
+
+
+														   
+														   
+														   
+														   
+#--------------- Users and Roles --------------------#
+
+db.getUsers();
+db.createUser({user:"kartik", pwd:"xxxxx", roles:[{role:"userAdmin", db:"university"}, {role:"userAdmin", db:"restbiz"} ]});
+
+mongod  --auth --dbpath 
+
+
+db.auth("kartik","xxxx");
+
+
+
+#--------------- ObjectId --------------------#
+
+immutable (can't be updated), unique, bson datatype, 12 byte value
+hostname + time + process id + random number
+db.student_enrollment.insert({ _id:001})
+
+
+db.course.find()[0]._id.getTimestamp();   // if using default objectId
+
+
+
+
+
+#--------------- Complex Queries --------------------#
+
+
+
+
+
+#--------------- Map Reduce --------------------#
+
+
+
+https://www.datadoghq.com/blog/collecting-mongodb-metrics-and-statistics/
+https://docs.mongodb.com/manual/administration/analyzing-mongodb-performance/
+
+#--------------- System Tables --------------------#
+
+
+#--------------- Database Maintenance --------------------#
+
+
+// Backing up a collection
+db.createCollection("course1", {capped:false, autoIndexID:true});
+db.course.find().forEach(function(doc){db.course1.insert(doc)});
+
+db.course.renameCollection("courseOld");
+db.course1.renameCollection("course");
+db.courseOld.drop();
+
+
+
+
+#--------------- Workload Management --------------------#
+
+
+
+#--------------- Logs and Alerts --------------------#
+

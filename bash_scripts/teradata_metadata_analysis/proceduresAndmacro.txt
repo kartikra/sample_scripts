@@ -1,0 +1,947 @@
+SPLText
+REPLACE PROCEDURE CLARITY_DBA_MAINT.CLARITY_UPDATE_WITS_PROFILE
+	(
+	IN WITSREGION VARCHAR(30),
+	IN REFREGION VARCHAR(30),
+	IN TICKETNO VARCHAR(30),
+	IN MANIFEST VARCHAR(100),
+
+	OUT ResultStr VARCHAR(5000)
+		
+	)
+	BEGIN
+	
+		DECLARE UsrC,RowCount,RefId, UpdateReqd integer;	
+		DECLARE SqlStr,CountStr,OutStr VARCHAR(1000);
+		DECLARE OLDWITSREGION, OLDREFREGION, OLDTICKETNO, OLDMANIFEST VARCHAR(100);
+		DECLARE C1 CURSOR FOR S1;
+		DECLARE C2 CURSOR FOR S2;
+
+		IF  COALESCE (WITSREGION,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+		
+		SET UpdateReqd=0;
+		
+		SET SqlStr = 'SELECT TRIM(WITS_REGION), TRIM(REFERENCE_REGION), TRIM(TICKET_NO), TRIM(MANIFEST_FILE) FROM CLARITY_DBA_MAINT.CLARITY_WITS_REFRESH_PROFILE WHERE WITS_REGION=? AND Current_Timestamp BETWEEN StartDate AND EndDate';
+		PREPARE S1 FROM SqlStr;
+		OPEN C1 USING WITSREGION;
+		FETCH C1 INTO OLDWITSREGION, OLDREFREGION, OLDTICKETNO, OLDMANIFEST;
+		
+		IF (SQLCODE = 0) THEN
+		
+			IF  (COALESCE(REFREGION,'') <> '') THEN
+				IF ( COALESCE(TRIM(REFREGION),'') <> COALESCE(OLDREFREGION,'')) THEN
+					SET UpdateReqd=1;
+					SET OLDREFREGION=COALESCE(TRIM(REFREGION),'');
+				END IF;
+			END IF;
+			
+			IF  (COALESCE(TICKETNO,'') <> '') THEN
+				IF ( COALESCE(TRIM(TICKETNO),'') <> COALESCE(OLDTICKETNO,'')) THEN
+					SET UpdateReqd=1;
+					SET OLDTICKETNO=COALESCE(TRIM(TICKETNO),'');
+				END IF;
+			END IF;
+			
+			IF  (COALESCE (MANIFEST,'') <> '') THEN
+				IF ( COALESCE(TRIM(MANIFEST),'') <> COALESCE(OLDMANIFEST,'')) THEN
+					SET UpdateReqd=1;
+					SET OLDMANIFEST=COALESCE(TRIM(MANIFEST),'');
+				END IF;
+			END IF;
+		
+			IF (UpdateReqd=1) THEN
+			
+				UPDATE CLARITY_DBA_MAINT.CLARITY_WITS_REFRESH_PROFILE SET EndDate=CURRENT_TIMESTAMP(0),UpdatedBy=USER
+				WHERE TRIM(WITS_REGION)=:WITSREGION AND Current_Timestamp BETWEEN StartDate AND EndDate;
+					
+			END IF;
+			
+		ELSE
+			SET UpdateReqd=1;
+			SET OLDREFREGION=COALESCE(REFREGION,'');
+			SET OLDTICKETNO=COALESCE(TICKETNO,'');
+			SET OLDMANIFEST=COALESCE(MANIFEST,'');
+		END IF;
+	
+		CLOSE C1;
+		
+		IF (UpdateReqd=1) THEN
+		
+			SET CountStr = 'SELECT (COALESCE(MAX(RefreshId),0) + 1) FROM CLARITY_DBA_MAINT.CLARITY_WITS_REFRESH_PROFILE';
+			PREPARE S2 FROM CountStr;
+			OPEN C2;
+			FETCH C2 INTO RefId;
+			CLOSE C2;
+			
+			INSERT INTO CLARITY_DBA_MAINT.CLARITY_WITS_REFRESH_PROFILE
+			VALUES (:RefId, :WITSREGION, :OLDREFREGION, :OLDTICKETNO, :OLDMANIFEST,
+					CURRENT_TIMESTAMP(0), CAST ('9999-12-31 23:59:59' AS TIMESTAMP(0)), USER, USER)
+			;
+		ELSE
+			SET CountStr = 'SELECT (COALESCE(MAX(RefreshId),0)) FROM CLARITY_DBA_MAINT.CLARITY_WITS_REFRESH_PROFILE';
+			PREPARE S2 FROM CountStr;
+			OPEN C2;
+			FETCH C2 INTO RefId;
+			CLOSE C2;
+		END IF;
+		
+		SELECT COALESCE(TRIM(WITS_REGION),'') || '|' || COALESCE(TRIM(REFERENCE_REGION),'') || '|' || COALESCE(TRIM(TICKET_NO),'') || '|' || COALESCE(TRIM(MANIFEST_FILE),'') 
+		INTO :OutStr
+		FROM CLARITY_DBA_MAINT.CLARITY_WITS_REFRESH_PROFILE
+		WHERE TRIM(WITS_REGION)=:WITSREGION AND Current_Timestamp BETWEEN StartDate AND EndDate;
+		
+		SET ResultStr=OutStr;
+
+	END;
+--------------------------------------------------------------------------------
+
+SPLText
+REPLACE PROCEDURE CLARITY_DBA_MAINT.BACKUP_DROP_TABLE_IF_EXISTS
+	( 
+	IN DBNAME VARCHAR(30),
+	IN TABNAME VARCHAR(30)
+	)
+	
+	BEGIN
+	DECLARE UsrC integer;	
+	DECLARE TabFoundCount, RowCount integer ;
+	DECLARE SqlStr1, SqlStr2, BackupTab VARCHAR(1000);
+	DECLARE C1 CURSOR FOR S1;
+	DECLARE C2 CURSOR FOR S2;
+	
+	IF  COALESCE (DBNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+	IF  COALESCE (TABNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+
+		
+	SET SqlStr1 = 'SELECT COALESCE(COUNT(*),0) FROM DBC.TABLES WHERE DatabaseName=? AND TableName=?';
+	PREPARE S1 FROM SqlStr1;
+	OPEN C1 USING DBNAME,TABNAME;
+	FETCH C1 INTO TabFoundCount;
+	CLOSE C1;
+
+	DELETE FROM CLARITY_DBA_MAINT.SP_DEBUG ALL;
+	INSERT INTO CLARITY_DBA_MAINT.SP_DEBUG SELECT 'TabFoundCount Is ' || TabFoundCount;
+	
+	IF TabFoundCount  <> 0 then
+			
+				-- DROP the Backup Table and Take a New Backup
+					SET BackupTab='BKUP_'  || TABNAME;
+					CALL CLARITY_DBA_MAINT.DROP_TABLE_IF_EXISTS ( DBNAME, BackupTab );
+					
+					CALL DBC.SysExecSQL
+					('CREATE TABLE ' || DBNAME || '.BKUP_' || TABNAME || ' AS  ' || DBNAME || '. ' || TABNAME  || ' WITH DATA AND STATS'  ) ;		
+					
+					-- DROP The Table
+					CALL DBC.SysExecSQL
+					('DROP TABLE ' || DBNAME || '. ' || TABNAME  ) ;		
+			
+	END IF;
+	
+	END;
+--------------------------------------------------------------------------------
+
+SPLText
+--SELECT * FROM DBC.TablesV WHERE DatabaseName='CLARITY_DBA_MAINT' AND TableName='TEST'
+--CALL CLARITY_DBA_MAINT.DROP_TABLE_IF_EXISTS  ('CLARITY_DBA_MAINT', 'TEST');
+--show procedure useradmin.dba_resetpass
+--sel * from CLARITY_DBA_MAINT.SP_DEBUG
+
+REPLACE PROCEDURE CLARITY_DBA_MAINT.DROP_TABLE_IF_EXISTS
+	( 
+	IN DBNAME VARCHAR(30),
+	IN TABNAME VARCHAR(30)
+	)
+	
+	BEGIN
+	DECLARE UsrC integer;	
+	DECLARE TabCount integer ;
+	DECLARE SqlStr VARCHAR(1000);
+	DECLARE C1 CURSOR FOR S1;
+
+	IF  COALESCE (DBNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+	IF  COALESCE (TABNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+	
+	SET SqlStr = 'SELECT COALESCE(COUNT(*),0) FROM DBC.TABLES WHERE DatabaseName=? AND TableName=?';
+	PREPARE S1 FROM SqlStr;
+	OPEN C1 USING DBNAME,TABNAME;
+	FETCH C1 INTO TabCount;
+	CLOSE C1;
+
+	DELETE FROM CLARITY_DBA_MAINT.SP_DEBUG ALL;
+	INSERT INTO CLARITY_DBA_MAINT.SP_DEBUG SELECT 'TabCount Is ' || TabCount;
+	
+	IF TabCount <> 0 then
+			CALL DBC.SysExecSQL
+			('DROP TABLE ' || DBNAME || '. ' || TABNAME  ) ;		
+	END IF;
+	
+	END;
+--------------------------------------------------------------------------------
+
+SPLText
+REPLACE PROCEDURE CLARITY_DBA_MAINT.CLARITY_UPG_CREATE_MIGSCRIPTS
+	(
+	IN DBSNAME VARCHAR(30),
+	IN TABNAME VARCHAR(30),
+	IN TGDBSNAME VARCHAR(30),
+	IN TGTABNAME VARCHAR(30),
+	OUT DataMigSQL VARCHAR(10000)	
+	)
+	BEGIN
+	
+		DECLARE UsrC integer;	
+		DECLARE ColName,ColType,TgtColType VARCHAR(30);
+		DECLARE SqlStr,TgtSQLStr,ResultSQLStr1, ResultSQLStr2 VARCHAR(10000);
+		DECLARE C1 CURSOR FOR S1;
+		DECLARE C2 CURSOR FOR S2;
+
+
+		IF  COALESCE (DBSNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+		IF  COALESCE (TABNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+		IF  COALESCE (TGDBSNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+		IF  COALESCE (TGTABNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+		
+		SET ResultSQLStr1='';
+		SET ResultSQLStr2='';
+			
+			SET SqlStr = 'SELECT TRIM(ColumnName), TRIM(ColumnType) FROM DBC.COLUMNSV WHERE ColumnName IS NOT NULL AND DatabaseName=? AND TableName=? ORDER BY ColumnId';
+			PREPARE S1 FROM SqlStr;
+			OPEN C1 USING DBSNAME,TABNAME;
+			
+			get_columns: LOOP
+				FETCH C1 INTO ColName,ColType;
+				IF (SQLCODE <> 0) THEN 
+					LEAVE get_columns;
+				ELSE
+					SET ResultSQLStr1=ResultSQLStr1 || ',"' || TRIM(ColName) || '"';		
+					IF ((ColType = 'I') OR (ColType = 'D')) THEN
+					
+						SET TgtSQLStr='SELECT TRIM(ColumnType) FROM DBC.COLUMNSV WHERE ColumnName IS NOT NULL AND DatabaseName=? AND TableName=? AND ColumnName=?';
+						PREPARE S2 FROM TgtSQLStr;
+						OPEN C2 USING TGDBSNAME,TGTABNAME,ColName;
+						FETCH C2 INTO TgtColType;
+						
+						IF ((TgtColType = 'CV') AND (ColType = 'I'))  THEN
+							SET ResultSQLStr2=ResultSQLStr2 || ',TRIM("' || TRIM(ColName) || '")';
+						END IF;
+						
+						IF ((TgtColType = 'CV') AND (ColType = 'D')) THEN
+							SET ResultSQLStr2=ResultSQLStr2 || ',TRIM(TRIM(TRAILING ''.'' FROM "' || TRIM(ColName) || '"))';
+						END IF;
+						
+						IF (TgtColType <> 'CV') THEN
+							SET ResultSQLStr2=ResultSQLStr2 || ',"' || TRIM(ColName) || '"';
+						END IF;
+						
+						CLOSE C2;
+
+					ELSE
+						SET ResultSQLStr2=ResultSQLStr2 || ',"' || TRIM(ColName) || '"';
+					END IF;
+				END IF;
+			END LOOP get_columns;
+			CLOSE C1;
+			
+			SET DataMigSQL='INSERT INTO ' || TRIM(TGDBSNAME) || '."' || TRIM(TGTABNAME) || '"(' || SUBSTRING(ResultSQLStr1 FROM 2) || ')' || ' SELECT ' ||  SUBSTRING(ResultSQLStr2 FROM 2) || ' FROM ' || TRIM(DBSNAME) || '."' || TRIM(TABNAME) || '";' ;
+	
+	
+	END;
+--------------------------------------------------------------------------------
+
+Request Text
+REPLACE MACRO CLARITY_DBA_MAINT.CLARITY_UPG_GET_ENV_DETAILS
+/*
+* Macro for getting environment variables
+20140722 - Kartik Ramasubramanian   - Intial Draft
+20150102 - Kartik Ramasubramanian   - Added 7th instance and materialized and tpf databases for WITS
+*/ 
+( ENV_TYPE VARCHAR(30), ENV_NAME VARCHAR(30) )
+AS 
+(
+
+SELECT #PARAMETERS
+FROM
+(
+	-- Region
+	SELECT 1 AS SR_NO, CAST('region="' || Region || '"; export region' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE Region IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+	-- TDHOST
+	SELECT 2, CASE WHEN EnvType='PROD' THEN CAST('TDPROD="' || TRIM(TDHOST) || '.kp.org"; export TDPROD' AS VARCHAR(200))
+				WHEN EnvType IN ('WITS','QA','NATL') THEN CAST('TDDEV="' || TRIM(TDHOST) || '.kp.org"; export TDDEV' AS VARCHAR(200))
+			END AS #PARAMETERS
+	FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE TDHOST  IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+	-- Run Name
+	SELECT 3, CAST('devrunName="' || EnvName || '"; export devrunName' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE EnvName IS NOT NULL AND EnvType IN ('WITS','QA','NATL') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 4, CAST('prodrunName="' || EnvName || '"; export prodrunName' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE EnvName IS NOT NULL AND EnvType='PROD' AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+	-- WITS Main Databases
+	SELECT 5, CAST('devStgDB="' || TRIM(StagingDB) || '"; export devStgDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType IN ('WITS','QA','NATL') AND StagingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 6, CAST('devReportDB="' || TRIM(ReportingDB) || '"; export devReportDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType IN ('WITS','QA','NATL')  AND ReportingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 7, CAST('devEpView="' || TRIM(EpView) || '"; export devEpView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType IN ('WITS','QA','NATL')  AND EpView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 8, CAST('devUserView="' || TRIM(UserView) || '"; export devUserView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType IN ('WITS','QA','NATL')  AND UserView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+	-- PROD Main Databases
+	SELECT 9, CAST('prodStgDB="' || TRIM(StagingDB) || '"; export prodStgDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType='PROD' AND StagingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 10, CAST('prodReportDB="' || TRIM(ReportingDB) || '"; export prodReportDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType='PROD'  AND ReportingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 11, CAST('prodEpView="' || TRIM(EpView) || '"; export prodEpView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType='PROD'  AND EpView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 12, CAST('prodUserView="' || TRIM(UserView) || '"; export prodUserView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType='PROD'  AND UserView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+	-- OwnerId for Lead or Single Deployment
+	SELECT 13, CAST('devownerId="' || TRIM(OwnerId) || '"; export devownerId' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OwnerId IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION	
+	-- OwnerId for Each Deployment
+	SELECT 14, CASE WHEN DatabaseType='A' THEN CAST('deployId1="' || TRIM(OwnerId) || '"; export deployId1' AS VARCHAR(200))
+				WHEN DatabaseType='B' THEN CAST('deployId2="' || TRIM(OwnerId) || '"; export deployId2' AS VARCHAR(200))
+				WHEN DatabaseType='C' THEN CAST('deployId3="' || TRIM(OwnerId) || '"; export deployId3' AS VARCHAR(200))
+				WHEN DatabaseType='D' THEN CAST('deployId4="' || TRIM(OwnerId) || '"; export deployId4' AS VARCHAR(200))
+				WHEN DatabaseType='E' THEN CAST('deployId5="' || TRIM(OwnerId) || '"; export deployId5' AS VARCHAR(200))
+				WHEN DatabaseType='F' THEN CAST('deployId6="' || TRIM(OwnerId) || '"; export deployId6' AS VARCHAR(200))
+				WHEN DatabaseType='G' THEN CAST('deployId7="' || TRIM(OwnerId) || '"; export deployId7' AS VARCHAR(200))
+			END AS #PARAMETERS	
+	FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE OwnerId  IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+	-- WITS Staging - 7 Databases
+	SELECT 15, CASE WHEN DatabaseType='A' THEN CAST('devDeployStgDB1="' || TRIM(StagingDB) || '"; export devDeployStgDB1' AS VARCHAR(200))
+				WHEN DatabaseType='B' THEN CAST('devDeployStgDB2="' || TRIM(StagingDB) || '"; export devDeployStgDB2' AS VARCHAR(200))
+				WHEN DatabaseType='C' THEN CAST('devDeployStgDB3="' || TRIM(StagingDB) || '"; export devDeployStgDB3' AS VARCHAR(200))
+				WHEN DatabaseType='D' THEN CAST('devDeployStgDB4="' || TRIM(StagingDB) || '"; export devDeployStgDB4' AS VARCHAR(200))
+				WHEN DatabaseType='E' THEN CAST('devDeployStgDB5="' || TRIM(StagingDB) || '"; export devDeployStgDB5' AS VARCHAR(200))
+				WHEN DatabaseType='F' THEN CAST('devDeployStgDB6="' || TRIM(StagingDB) || '"; export devDeployStgDB6' AS VARCHAR(200))
+				WHEN DatabaseType='G' THEN CAST('devDeployStgDB7="' || TRIM(StagingDB) || '"; export devDeployStgDB7' AS VARCHAR(200))
+			END AS #PARAMETERS	
+	FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE StagingDB  IS NOT NULL AND EnvType IN ('WITS','QA','NATL') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+	-- WITS Calculated - 7 Databases
+	SELECT 16, CASE WHEN DatabaseType='A' THEN CAST('devCalcReportDB1="' || TRIM(ReportingDB) || '"; export devCalcReportDB1' AS VARCHAR(200))
+				WHEN DatabaseType='B' THEN CAST('devCalcReportDB2="' || TRIM(ReportingDB) || '"; export devCalcReportDB2' AS VARCHAR(200))
+				WHEN DatabaseType='C' THEN CAST('devCalcReportDB3="' || TRIM(ReportingDB) || '"; export devCalcReportDB3' AS VARCHAR(200))
+				WHEN DatabaseType='D' THEN CAST('devCalcReportDB4="' || TRIM(ReportingDB) || '"; export devCalcReportDB4' AS VARCHAR(200))
+				WHEN DatabaseType='E' THEN CAST('devCalcReportDB5="' || TRIM(ReportingDB) || '"; export devCalcReportDB5' AS VARCHAR(200))
+				WHEN DatabaseType='F' THEN CAST('devCalcReportDB6="' || TRIM(ReportingDB) || '"; export devCalcReportDB6' AS VARCHAR(200))
+				WHEN DatabaseType='G' THEN CAST('devCalcReportDB7="' || TRIM(ReportingDB) || '"; export devCalcReportDB7' AS VARCHAR(200))
+			END AS #PARAMETERS	
+	FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE ReportingDB  IS NOT NULL AND EnvType IN ('WITS','QA','NATL') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+
+	-- PROD Staging - 7 Databases
+	SELECT 17, CASE WHEN DatabaseType='A' THEN CAST('prodDeployStgDB1="' || TRIM(StagingDB) || '"; export prodDeployStgDB1' AS VARCHAR(200))
+				WHEN DatabaseType='B' THEN CAST('prodDeployStgDB2="' || TRIM(StagingDB) || '"; export prodDeployStgDB2' AS VARCHAR(200))
+				WHEN DatabaseType='C' THEN CAST('prodDeployStgDB3="' || TRIM(StagingDB) || '"; export prodDeployStgDB3' AS VARCHAR(200))
+				WHEN DatabaseType='D' THEN CAST('prodDeployStgDB4="' || TRIM(StagingDB) || '"; export prodDeployStgDB4' AS VARCHAR(200))
+				WHEN DatabaseType='E' THEN CAST('prodDeployStgDB5="' || TRIM(StagingDB) || '"; export prodDeployStgDB5' AS VARCHAR(200))
+				WHEN DatabaseType='F' THEN CAST('prodDeployStgDB6="' || TRIM(StagingDB) || '"; export prodDeployStgDB6' AS VARCHAR(200))
+				WHEN DatabaseType='G' THEN CAST('prodDeployStgDB7="' || TRIM(StagingDB) || '"; export prodDeployStgDB7' AS VARCHAR(200))
+			END AS #PARAMETERS	
+	FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE StagingDB  IS NOT NULL AND EnvType='PROD' AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+	-- PROD Calculated - 7 Databases
+	SELECT 18, CASE WHEN DatabaseType='A' THEN CAST('prodCalcReportDB1="' || TRIM(ReportingDB) || '"; export prodCalcReportDB1' AS VARCHAR(200))
+				WHEN DatabaseType='B' THEN CAST('prodCalcReportDB2="' || TRIM(ReportingDB) || '"; export prodCalcReportDB2' AS VARCHAR(200))
+				WHEN DatabaseType='C' THEN CAST('prodCalcReportDB3="' || TRIM(ReportingDB) || '"; export prodCalcReportDB3' AS VARCHAR(200))
+				WHEN DatabaseType='D' THEN CAST('prodCalcReportDB4="' || TRIM(ReportingDB) || '"; export prodCalcReportDB4' AS VARCHAR(200))
+				WHEN DatabaseType='E' THEN CAST('prodCalcReportDB5="' || TRIM(ReportingDB) || '"; export prodCalcReportDB5' AS VARCHAR(200))
+				WHEN DatabaseType='F' THEN CAST('prodCalcReportDB6="' || TRIM(ReportingDB) || '"; export prodCalcReportDB6' AS VARCHAR(200))
+				WHEN DatabaseType='G' THEN CAST('prodCalcReportDB7="' || TRIM(ReportingDB) || '"; export prodCalcReportDB7' AS VARCHAR(200))
+			END AS #PARAMETERS	
+	FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE ReportingDB  IS NOT NULL AND EnvType='PROD' AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+	-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+	-- Prod KPBI and Materialized Views
+	SELECT 19, CAST('prodMatReportDB="' || MVReportingDB || '"; export prodMatReportDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType='PROD' AND MVReportingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 20, CAST('prodMatEpView="' || MVEpView  || '"; export prodMatEpView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType='PROD' AND MVEpView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 21, CAST('prodMatUserView="' || MVUserView || '"; export prodMatUserView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType='PROD' AND MVUserView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 22, CAST('prodKPBIReportDB="' || KPReportingDB || '"; export prodKPBIReportDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType='PROD' AND KPReportingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 23, CAST('prodKPBIEpView="' || KPEpView || '"; export prodKPBIEpView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType='PROD' AND KPEpView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 24, CAST('prodKPBIUserView="' || KPUserView || '"; export prodKPBIUserView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType='PROD' AND KPUserView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+	-- Prod Lead TPF Tables
+	SELECT 25, CAST('prodTpfStageDB="' || StagingDB || '"; export prodTpfStageDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE  DatabaseType IS NOT NULL  AND EnvType='PROD' AND DatabaseType='TPF' AND StagingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 26, CAST('prodTpfReportDB="' || ReportingDB || '"; export prodTpfReportDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE DatabaseType IS NOT NULL  AND EnvType='PROD' AND DatabaseType='TPF' AND ReportingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 27, CAST('prodTpfEpView="' || EpView || '"; export prodTpfEpView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE DatabaseType IS NOT NULL  AND EnvType='PROD' AND DatabaseType='TPF' AND EpView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 28, CAST('prodTpfUserView="' || UserView || '"; export prodTpfUserView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE DatabaseType IS NOT NULL  AND EnvType='PROD' AND DatabaseType='TPF' AND UserView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+	-- Prod TPF Staging - 7 Databases
+	SELECT 29, CASE WHEN DatabaseType='A' THEN CAST('prodTpfDeployStgDB1="' || TRIM(TPFStagingDB) || '"; export prodTpfDeployStgDB1' AS VARCHAR(200))
+				WHEN DatabaseType='B' THEN CAST('prodTpfDeployStgDB2="' || TRIM(TPFStagingDB) || '"; export prodTpfDeployStgDB2' AS VARCHAR(200))
+				WHEN DatabaseType='C' THEN CAST('prodTpfDeployStgDB3="' || TRIM(TPFStagingDB) || '"; export prodTpfDeployStgDB3' AS VARCHAR(200))
+				WHEN DatabaseType='D' THEN CAST('prodTpfDeployStgDB4="' || TRIM(TPFStagingDB) || '"; export prodTpfDeployStgDB4' AS VARCHAR(200))
+				WHEN DatabaseType='E' THEN CAST('prodTpfDeployStgDB5="' || TRIM(TPFStagingDB) || '"; export prodTpfDeployStgDB5' AS VARCHAR(200))
+				WHEN DatabaseType='F' THEN CAST('prodTpfDeployStgDB6="' || TRIM(TPFStagingDB) || '"; export prodTpfDeployStgDB6' AS VARCHAR(200))
+				WHEN DatabaseType='G' THEN CAST('prodTpfDeployStgDB7="' || TRIM(TPFStagingDB) || '"; export prodTpfDeployStgDB7' AS VARCHAR(200))
+			END AS #PARAMETERS	
+	FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE TPFStagingDB IS NOT NULL AND EnvType='PROD' AND DatabaseType IS NOT NULL AND DatabaseType IN ('A','B','C','D','E','F','G') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+	-- Prod TPF Reporting - 7 Databases
+	SELECT 30, CASE WHEN DatabaseType='A' THEN CAST('prodTpfCalcReportDB1="' || TRIM(TPFReportingDB) || '"; export prodTpfCalcReportDB1' AS VARCHAR(200))
+				WHEN DatabaseType='B' THEN CAST('prodTpfCalcReportDB2="' || TRIM(TPFReportingDB) || '"; export prodTpfCalcReportDB2' AS VARCHAR(200))
+				WHEN DatabaseType='C' THEN CAST('prodTpfCalcReportDB3="' || TRIM(TPFReportingDB) || '"; export prodTpfCalcReportDB3' AS VARCHAR(200))
+				WHEN DatabaseType='D' THEN CAST('prodTpfCalcReportDB4="' || TRIM(TPFReportingDB) || '"; export prodTpfCalcReportDB4' AS VARCHAR(200))
+				WHEN DatabaseType='E' THEN CAST('prodTpfCalcReportDB5="' || TRIM(TPFReportingDB) || '"; export prodTpfCalcReportDB5' AS VARCHAR(200))
+				WHEN DatabaseType='F' THEN CAST('prodTpfCalcReportDB6="' || TRIM(TPFReportingDB) || '"; export prodTpfCalcReportDB6' AS VARCHAR(200))
+				WHEN DatabaseType='G' THEN CAST('prodTpfCalcReportDB7="' || TRIM(TPFReportingDB) || '"; export prodTpfCalcReportDB7' AS VARCHAR(200))
+			END AS #PARAMETERS	
+	FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE TPFReportingDB IS NOT NULL AND EnvType='PROD' AND DatabaseType IS NOT NULL  AND DatabaseType IN ('A','B','C','D','E','F','G') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+	
+	-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	-- WITS KPBI and Materialized Views
+	SELECT 19, CAST('devMatReportDB="' || MVReportingDB || '"; export devMatReportDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType IN ('WITS','QA','NATL') AND MVReportingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 20, CAST('devMatEpView="' || MVEpView  || '"; export devMatEpView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType IN ('WITS','QA','NATL') AND MVEpView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 21, CAST('devMatUserView="' || MVUserView || '"; export devMatUserView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType IN ('WITS','QA','NATL') AND MVUserView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 22, CAST('devKPBIReportDB="' || KPReportingDB || '"; export devKPBIReportDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType IN ('WITS','QA','NATL') AND KPReportingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 23, CAST('devKPBIEpView="' || KPEpView || '"; export devKPBIEpView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType IN ('WITS','QA','NATL') AND KPEpView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 24, CAST('devKPBIUserView="' || KPUserView || '"; export devKPBIUserView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND EnvType IN ('WITS','QA','NATL') AND KPUserView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+	-- WITS Lead TPF Tables
+	SELECT 25, CAST('devTpfStageDB="' || StagingDB || '"; export devTpfStageDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE  DatabaseType IS NOT NULL  AND EnvType IN ('WITS','QA','NATL') AND DatabaseType='TPF' AND StagingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 26, CAST('devTpfReportDB="' || ReportingDB || '"; export devTpfReportDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE DatabaseType IS NOT NULL  AND EnvType IN ('WITS','QA','NATL') AND DatabaseType='TPF' AND ReportingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 27, CAST('devTpfEpView="' || EpView || '"; export devTpfEpView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE DatabaseType IS NOT NULL  AND EnvType IN ('WITS','QA','NATL') AND DatabaseType='TPF' AND EpView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 28, CAST('devTpfUserView="' || UserView || '"; export devTpfUserView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE DatabaseType IS NOT NULL  AND EnvType IN ('WITS','QA','NATL') AND DatabaseType='TPF' AND UserView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+	-- WITS TPF Staging - 7 Databases
+	SELECT 29, CASE WHEN DatabaseType='A' THEN CAST('devTpfDeployStgDB1="' || TRIM(TPFStagingDB) || '"; export devTpfDeployStgDB1' AS VARCHAR(200))
+				WHEN DatabaseType='B' THEN CAST('devTpfDeployStgDB2="' || TRIM(TPFStagingDB) || '"; export devTpfDeployStgDB2' AS VARCHAR(200))
+				WHEN DatabaseType='C' THEN CAST('devTpfDeployStgDB3="' || TRIM(TPFStagingDB) || '"; export devTpfDeployStgDB3' AS VARCHAR(200))
+				WHEN DatabaseType='D' THEN CAST('devTpfDeployStgDB4="' || TRIM(TPFStagingDB) || '"; export devTpfDeployStgDB4' AS VARCHAR(200))
+				WHEN DatabaseType='E' THEN CAST('devTpfDeployStgDB5="' || TRIM(TPFStagingDB) || '"; export devTpfDeployStgDB5' AS VARCHAR(200))
+				WHEN DatabaseType='F' THEN CAST('devTpfDeployStgDB6="' || TRIM(TPFStagingDB) || '"; export devTpfDeployStgDB6' AS VARCHAR(200))
+				WHEN DatabaseType='G' THEN CAST('devTpfDeployStgDB7="' || TRIM(TPFStagingDB) || '"; export devTpfDeployStgDB7' AS VARCHAR(200))
+			END AS #PARAMETERS	
+	FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE TPFStagingDB IS NOT NULL AND EnvType IN ('WITS','QA','NATL') AND DatabaseType IS NOT NULL AND DatabaseType IN ('A','B','C','D','E','F','G') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+	-- WITS TPF Reporting - 7 Databases
+	SELECT 30, CASE WHEN DatabaseType='A' THEN CAST('devTpfCalcReportDB1="' || TRIM(TPFReportingDB) || '"; export devTpfCalcReportDB1' AS VARCHAR(200))
+				WHEN DatabaseType='B' THEN CAST('devTpfCalcReportDB2="' || TRIM(TPFReportingDB) || '"; export devTpfCalcReportDB2' AS VARCHAR(200))
+				WHEN DatabaseType='C' THEN CAST('devTpfCalcReportDB3="' || TRIM(TPFReportingDB) || '"; export devTpfCalcReportDB3' AS VARCHAR(200))
+				WHEN DatabaseType='D' THEN CAST('devTpfCalcReportDB4="' || TRIM(TPFReportingDB) || '"; export devTpfCalcReportDB4' AS VARCHAR(200))
+				WHEN DatabaseType='E' THEN CAST('devTpfCalcReportDB5="' || TRIM(TPFReportingDB) || '"; export devTpfCalcReportDB5' AS VARCHAR(200))
+				WHEN DatabaseType='F' THEN CAST('devTpfCalcReportDB6="' || TRIM(TPFReportingDB) || '"; export devTpfCalcReportDB6' AS VARCHAR(200))
+				WHEN DatabaseType='G' THEN CAST('devTpfCalcReportDB7="' || TRIM(TPFReportingDB) || '"; export devTpfCalcReportDB7' AS VARCHAR(200))
+			END AS #PARAMETERS	
+	FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE TPFReportingDB IS NOT NULL AND EnvType IN ('WITS','QA','NATL') AND DatabaseType IS NOT NULL  AND DatabaseType IN ('A','B','C','D','E','F','G') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+	
+	-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	
+	-- Prod DUMMY Tables
+	SELECT 31, CAST('prodDummyReportDB="' || ReportingDB || '"; export prodDummyReportDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE DatabaseType IS NOT NULL  AND EnvType='PROD' AND DatabaseType='DUMMY' AND ReportingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 32, CAST('prodDummyEpView="' || EpView || '"; export prodDummyEpView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE DatabaseType IS NOT NULL  AND EnvType='PROD' AND DatabaseType='DUMMY' AND EpView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 33, CAST('prodDummyUserView="' || UserView || '"; export prodDummyUserView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE DatabaseType IS NOT NULL  AND EnvType='PROD' AND DatabaseType='DUMMY' AND UserView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION	
+
+	-- Prod NODUMMY Tables
+	SELECT 34, CAST('prodNoDummyReportDB="' || ReportingDB || '"; export prodNoDummyReportDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE DatabaseType IS NOT NULL  AND EnvType='PROD' AND DatabaseType='NODUMMY' AND ReportingDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 35, CAST('prodNoDummyEpView="' || EpView || '"; export prodNoDummyEpView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE DatabaseType IS NOT NULL  AND EnvType='PROD' AND DatabaseType='NODUMMY' AND EpView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 36, CAST('prodNoDummyUserView="' || UserView || '"; export prodNoDummyUserView' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE DatabaseType IS NOT NULL  AND EnvType='PROD' AND DatabaseType='NODUMMY' AND UserView IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	
+	-- Prod Other Databases (For Future Use)
+	SELECT 51, CAST('prodOtherDB1="' || OtherDB1 || '"; export prodOtherDB1' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OtherDB1 IS NOT NULL AND EnvType='PROD' AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 52, CAST('prodOtherDB2="' || OtherDB2 || '"; export prodOtherDB2' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OtherDB2 IS NOT NULL AND EnvType='PROD' AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 53, CAST('prodOtherDB3="' || OtherDB3 || '"; export prodOtherDB3' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OtherDB3 IS NOT NULL AND EnvType='PROD' AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 54, CAST('prodOtherDB4="' || OtherDB4 || '"; export prodOtherDB4' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OtherDB4 IS NOT NULL AND EnvType='PROD' AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 55, CAST('prodOtherDB5="' || OtherDB5 || '"; export prodOtherDB5' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OtherDB5 IS NOT NULL AND EnvType='PROD' AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 56, CAST('prodOtherDB6="' || OtherDB6 || '"; export prodOtherDB6' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OtherDB6 IS NOT NULL AND EnvType='PROD' AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+	-- WITS Other Databases (For Future Use)
+	SELECT 51, CAST('devOtherDB1="' || OtherDB1 || '"; export devOtherDB1' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OtherDB1 IS NOT NULL AND EnvType IN ('WITS','QA','NATL') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 52, CAST('devOtherDB2="' || OtherDB2 || '"; export devOtherDB2' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OtherDB2 IS NOT NULL AND EnvType IN ('WITS','QA','NATL') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 53, CAST('devOtherDB3="' || OtherDB3 || '"; export devOtherDB3' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OtherDB3 IS NOT NULL AND EnvType IN ('WITS','QA','NATL') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 54, CAST('devOtherDB4="' || OtherDB4 || '"; export devOtherDB4' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OtherDB4 IS NOT NULL AND EnvType IN ('WITS','QA','NATL') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 55, CAST('devOtherDB5="' || OtherDB5 || '"; export devOtherDB5' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OtherDB5 IS NOT NULL AND EnvType IN ('WITS','QA','NATL') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+	SELECT 56, CAST('devOtherDB6="' || OtherDB6 || '"; export devOtherDB6' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE (DatabaseType IS NULL OR DatabaseType='LEAD') AND OtherDB6 IS NOT NULL AND EnvType IN ('WITS','QA','NATL') AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME UNION
+
+
+	-- USHARE DB
+	SELECT 57, CAST('ushareDB="' || UshareDB || '"; export ushareDB' AS VARCHAR(200))  AS #PARAMETERS FROM CLARITY_DBA_MAINT.CLARITY_ENV_PROFILE WHERE UshareDB IS NOT NULL AND EnvType=:ENV_TYPE AND EnvName=:ENV_NAME
+
+) PARM_DATA WHERE #PARAMETERS IS NOT NULL
+   ORDER BY SR_NO,#PARAMETERS ;
+
+);
+--------------------------------------------------------------------------------
+
+Request Text
+REPLACE MACRO CLARITY_DBA_MAINT.CLARITY_UPG_TABLE_COMPARISON
+/*
+* Macro to compare Two table 
+Compare level a) Table Properties b) Column Properties c) Index properties d)  Index Constraint Properties.
+20140524 - Balu   - Intial Draft
+
+20140715 - r.kartik - Made changes to validate indexes. Check for index properties in the same IndexNumber
+20140811 - r.kartik - Added Logic for Showing Missing Columns in Source and Target Tables
+20140901 - r.kartik - Modified Stats Property Check Logic and replaced SUM() to COUNT()
+*/ 
+( SRC_DB VARCHAR(30), SRC_TB VARCHAR(30), TRG_DB VARCHAR(30), TRG_TB VARCHAR(30)  )
+AS 
+(
+		----------------------- TABLE PROPERTIES     
+
+		SELECT 
+		CAST (1 AS INTEGER) AS ERROR_NUM,
+		CAST('TABLE PROPERTIES BAD - CHECK ' AS VARCHAR(50)) AS INFORMATION,				
+		CAST(SRC.DATABASENAME AS VARCHAR(30)) AS DATABASENAME, 
+		CAST(SRC.TABLENAME AS VARCHAR(30)) AS TABLENAME,
+		CAST('' AS VARCHAR(30)) AS ColumnName
+		FROM		
+		DBC.TABLES SRC  , DBC.TABLES TRG
+		WHERE	
+		SRC.TABLENAME = :SRC_TB
+			AND	 SRC.DATABASENAME = :SRC_DB
+			AND	TRG.TABLENAME =:TRG_TB
+			AND	 TRG.DATABASENAME = :TRG_DB
+			AND	
+		(  			COALESCE(TRIM(TRG.TABLEKIND),' ') <>COALESCE(TRIM( SRC.TABLEKIND),' ')
+				OR COALESCE(TRIM(TRG.PROTECTIONTYPE),' ') <>COALESCE(TRIM(SRC.PROTECTIONTYPE),' ')
+				OR COALESCE(TRIM(TRG.JOURNALFLAG),' ') <>COALESCE(TRIM( SRC.JOURNALFLAG),' ')
+				OR COALESCE(TRIM(TRG.COMMENTSTRING),' ') <>COALESCE(TRIM( SRC.COMMENTSTRING),' ')
+		) 
+
+		UNION
+
+		----------------------- COLUMN COUNT     
+		
+		SELECT 	 
+				CAST (2 AS INTEGER),
+				CAST('COLUMN COUNT  BAD - CHECK' AS VARCHAR(50))   AS INFORMATION, 
+				CAST(SRC.DATABASENAME AS VARCHAR(30)),
+				CAST(SRC.TABLENAME AS VARCHAR(30)), 
+				CAST ('' AS VARCHAR(30))
+		FROM	
+		DBC.COLUMNS SRC,
+		DBC.COLUMNS TRG
+		WHERE	
+		SRC.TABLENAME = :SRC_TB
+			AND	 SRC.DATABASENAME = :SRC_DB
+			AND	TRG.TABLENAME =:TRG_TB
+			AND	 TRG.DATABASENAME = :TRG_DB
+		HAVING	 SUM(SRC.COLUMNID) <> SUM(TRG.COLUMNID) 
+		GROUP BY 1,2,3,4,5
+
+		UNION	
+		
+		----------------------- COLUMN DETAILS     
+		
+		SELECT 	3,'COLUMN PROPERTIES BAD - CHECK ' AS INFORMATION, 
+				SRC.DATABASENAME,
+				SRC.TABLENAME, SRC.ColumnName
+		FROM	
+		DBC.COLUMNS SRC,
+		DBC.COLUMNS TRG
+		WHERE	
+		SRC.TABLENAME = :SRC_TB
+			AND	 SRC.DATABASENAME = :SRC_DB
+			AND	TRG.TABLENAME =:TRG_TB
+			AND	 TRG.DATABASENAME = :TRG_DB
+			AND	SRC.COLUMNID=TRG.COLUMNID
+			AND	
+		(  COALESCE(TRIM(TRG.COLUMNFORMAT),' ') <>COALESCE(TRIM( SRC.COLUMNFORMAT),' ')
+			OR	COALESCE(TRIM(TRG.COLUMNTITLE),' ') <>COALESCE(TRIM( SRC.COLUMNTITLE),' ')
+			OR	COALESCE(TRIM(TRG.COLUMNTYPE),' ') <>COALESCE(TRIM(SRC.COLUMNTYPE),' ')
+			OR	 TRG.COLUMNLENGTH<>SRC.COLUMNLENGTH
+			OR	 COALESCE(TRIM( TRG.DEFAULTVALUE),' ') <>COALESCE(TRIM( SRC.DEFAULTVALUE),' ')
+			OR	 COALESCE(TRIM( TRG.NULLABLE),' ') <>COALESCE(TRIM(SRC.NULLABLE),' ')
+			OR	 COALESCE(TRIM( TRG.COMMENTSTRING),' ') <>COALESCE(TRIM(SRC.COMMENTSTRING),' ')
+			OR	 TRG.DECIMALTOTALDIGITS<>SRC.DECIMALTOTALDIGITS
+			OR	 TRG.DECIMALFRACTIONALDIGITS<>SRC.DECIMALFRACTIONALDIGITS
+			OR	 COALESCE(TRIM(TRG.UPPERCASEFLAG),' ') <>COALESCE(TRIM(SRC.UPPERCASEFLAG),' ')
+			OR	 COALESCE(TRIM(TRG.COMPRESSIBLE),' ') <>COALESCE(TRIM(SRC.COMPRESSIBLE),' ')
+			OR	 COALESCE(TRIM(TRG.COMPRESSVALUE),' ') <>COALESCE(TRIM(SRC.COMPRESSVALUE),' ')
+			OR	 COALESCE(TRIM(TRG.COLUMNCONSTRAINT),' ') <>COALESCE(TRIM(SRC.COLUMNCONSTRAINT),' ')
+			OR	 TRG.CONSTRAINTCOUNT<>SRC.CONSTRAINTCOUNT
+			OR	 COALESCE(TRIM( TRG.COMPRESSVALUELIST),' ') <>COALESCE(TRIM(SRC.COMPRESSVALUELIST),' ')
+		)			
+		
+		UNION
+		
+		SELECT 4 AS ERROR_NUM,  'COLUMN MISSING IN TGT ' AS INFORMATION,
+		:SRC_DB AS DATABASENAME, :SRC_TB AS TABLENAME, T.ColumnName
+		FROM
+		(	SELECT 	SRC.ColumnName FROM	DBC.COLUMNS SRC
+			WHERE	SRC.TABLENAME = :SRC_TB AND	 SRC.DATABASENAME = :SRC_DB	
+			MINUS
+			SELECT TRG.ColumnName FROM	DBC.COLUMNS TRG
+			WHERE	TRG.TABLENAME = :TRG_TB AND	 TRG.DATABASENAME = :TRG_DB	
+		) T
+		
+		UNION
+		
+		SELECT 4 AS ERROR_NUM,  'COLUMN MISSING IN SRC ' AS INFORMATION,
+		:TRG_DB AS DATABASENAME, :TRG_TB AS TABLENAME, T.ColumnName
+		FROM
+		(	SELECT TRG.ColumnName FROM	DBC.COLUMNS TRG
+			WHERE	TRG.TABLENAME = :TRG_TB AND	 TRG.DATABASENAME = :TRG_DB	
+			MINUS
+			SELECT 	SRC.ColumnName FROM	DBC.COLUMNS SRC
+			WHERE	SRC.TABLENAME = :SRC_TB AND	 SRC.DATABASENAME = :SRC_DB	
+		) T
+		
+
+		UNION
+		 
+		--> INDEX Count  LEVEL DETAILS 
+
+		SELECT 	5,'INDEX Count BAD - CHECK' AS INFORMATION, SRC.DATABASENAME,
+				SRC.TABLENAME, ''
+		FROM	
+		DBC.INDICES SRC,DBC.INDICES TRG
+		WHERE	
+		SRC.TABLENAME = :SRC_TB
+			AND	 SRC.DATABASENAME = :SRC_DB
+			AND	TRG.TABLENAME =:TRG_TB
+			AND	 TRG.DATABASENAME = :TRG_DB
+		HAVING	 SUM(SRC.COLUMNPOSITION) <> SUM(TRG.COLUMNPOSITION) 
+		GROUP BY 1,2,3,4,5
+		
+
+		UNION	
+		
+		--> If the Index count is diffrent then fix it, it will correct the Index properties too,
+		--> Usually Columnname comparision creates this issue 
+		--> INDEX LEVEL DETAILS 
+
+		SELECT 	 6,'INDEX PROPERTIES BAD - CHECK' AS INFORMATION, 
+			SRC.DATABASENAME,
+				SRC.TABLENAME, ''
+		FROM	
+		DBC.INDICES SRC,  DBC.INDICES TRG
+		WHERE	
+		SRC.TABLENAME = :SRC_TB
+			AND	 SRC.DATABASENAME = :SRC_DB
+			AND	TRG.TABLENAME =:TRG_TB
+			AND	 TRG.DATABASENAME = :TRG_DB
+			AND	SRC.COLUMNPOSITION = TRG.COLUMNPOSITION
+			AND	SRC.IndexNumber = TRG.IndexNumber
+			AND	
+		(  		  COALESCE(TRG.INDEXNAME,' ') <> COALESCE(SRC.INDEXNAME,' ')
+				OR COALESCE(TRIM(TRG.INDEXTYPE),' ') <> COALESCE(TRIM(SRC.INDEXTYPE),' ')
+				OR COALESCE(TRIM(TRG.UNIQUEFLAG),' ') <> COALESCE(TRIM( SRC.UNIQUEFLAG),' ')
+				OR COALESCE(TRIM(TRG.COLUMNNAME),' ') <> COALESCE(TRIM( SRC.COLUMNNAME),' ')
+				OR COALESCE(TRIM(TRG.COLUMNPOSITION),' ') <> COALESCE(TRIM( SRC.COLUMNPOSITION),' ')
+				OR COALESCE(TRIM(TRG.UNIQUEORPK),' ') <> COALESCE(TRIM( SRC.UNIQUEORPK),' ')
+				OR COALESCE(TRIM(TRG.VTCONSTRAINTTYPE),' ') <> COALESCE(TRIM( SRC.VTCONSTRAINTTYPE),' ')						
+		) 
+
+		UNION	
+		
+		-------------------------------------------------------
+		---> PARTITION LEVEL DETAILS
+		
+		SELECT 	   7,'PARTITION PROPERTIES BAD - CHECK' AS INFORMATION, 
+		SRC.DATABASENAME,
+				SRC.TABLENAME, ''
+		FROM	DBC.INDEXCONSTRAINTS SRC, DBC.INDEXCONSTRAINTS TRG
+		WHERE	
+		SRC.TABLENAME = :SRC_TB
+			AND	 SRC.DATABASENAME = :SRC_DB
+			AND	TRG.TABLENAME =:TRG_TB
+			AND	 TRG.DATABASENAME = :TRG_DB
+
+			AND	
+		(  			COALESCE(TRIM(TRG.INDEXNAME),' ') <>COALESCE(TRIM( SRC.INDEXNAME),' ')
+				OR COALESCE(TRIM(TRG.INDEXNUMBER),' ') <>COALESCE(TRIM(SRC.INDEXNUMBER),' ')
+				OR COALESCE(TRIM(TRG.CONSTRAINTTYPE),' ') <> COALESCE(TRIM( SRC.CONSTRAINTTYPE),' ')
+				OR COALESCE(TRIM(TRG.CONSTRAINTTEXT),' ') <> COALESCE(TRIM( SRC.CONSTRAINTTEXT),' ')
+		)
+
+
+		UNION
+
+		----------------------- STATS COUNT     
+		
+		SELECT 	 
+				CAST (8 AS INTEGER),
+				CAST('STATS COUNT  BAD - CHECK' AS VARCHAR(50))   AS INFORMATION, 
+				CAST(SRC.DATABASENAME AS VARCHAR(30)),
+				CAST(SRC.TABLENAME AS VARCHAR(30)), 
+				CAST ('' AS VARCHAR(30))
+		FROM	
+		DBC.STATSV SRC,
+		DBC.STATSV TRG
+		WHERE	
+		SRC.TABLENAME = :SRC_TB
+			AND	 SRC.DATABASENAME = :SRC_DB
+			AND	TRG.TABLENAME =:TRG_TB
+			AND	 TRG.DATABASENAME = :TRG_DB
+		HAVING	 COUNT(SRC.StatsId) <> COUNT(TRG.StatsId) 
+		GROUP BY 1,2,3,4,5
+
+
+		
+		UNION	
+		
+		-------------------------------------------------------
+		---> STATS  DETAILS
+		
+		SELECT 	   9,'STATS MISSING IN TGT' AS INFORMATION, 
+		:SRC_DB,
+		:SRC_TB, ''
+		FROM
+		(		
+			SELECT 
+			RANK() OVER (PARTITION BY SRC.DATABASENAME, SRC.TABLENAME
+			ORDER BY  COALESCE(TRIM( SRC.StatsId),' ')) StatsPos, 
+			COALESCE(TRIM( SRC.COLUMNNAME),' ') COLUMNNAME
+			FROM DBC.StatsV SRC
+			WHERE TRIM(SRC.DatabaseName)=:SRC_DB AND TRIM(SRC.TableName)=:SRC_TB
+
+			MINUS
+
+			SELECT 
+			RANK() OVER (PARTITION BY TGT.DATABASENAME, TGT.TABLENAME
+			ORDER BY  COALESCE(TRIM( TGT.StatsId),' ')) StatsPos, 
+			COALESCE(TRIM( TGT.COLUMNNAME),' ') COLUMNNAME
+			FROM DBC.StatsV TGT
+			WHERE TRIM(TGT.DatabaseName)=:TRG_DB AND TRIM(TGT.TableName)=:TRG_TB
+		) TEMP
+		
+
+		UNION
+		
+		SELECT 	   9,'STATS MISSING IN SRC' AS INFORMATION, 
+		:TRG_DB,
+		:TRG_TB, ''
+		FROM
+		(		
+			SELECT 
+			RANK() OVER (PARTITION BY TGT.DATABASENAME, TGT.TABLENAME
+			ORDER BY  COALESCE(TRIM( TGT.StatsId),' ')) StatsPos, 
+			COALESCE(TRIM( TGT.COLUMNNAME),' ') COLUMNNAME
+			FROM DBC.StatsV TGT
+			WHERE TRIM(TGT.DatabaseName)=:TRG_DB AND TRIM(TGT.TableName)=:TRG_TB
+			
+			MINUS
+			
+			SELECT 
+			RANK() OVER (PARTITION BY SRC.DATABASENAME, SRC.TABLENAME
+			ORDER BY  COALESCE(TRIM( SRC.StatsId),' ')) StatsPos, 
+			COALESCE(TRIM( SRC.COLUMNNAME),' ') COLUMNNAME
+			FROM DBC.StatsV SRC
+			WHERE TRIM(SRC.DatabaseName)=:SRC_DB AND TRIM(SRC.TableName)=:SRC_TB
+			
+		) TEMP;
+		
+		
+		
+);
+--------------------------------------------------------------------------------
+
+SPLText
+REPLACE PROCEDURE CLARITY_DBA_MAINT.CLARITY_UPG_CREATE_STATS
+	(
+	IN GENTYPE INTEGER, 
+	IN DBSNAME VARCHAR(30),
+	IN TABNAME VARCHAR(30),
+	IN TGTDBSNAME VARCHAR(30),
+	OUT CollectStatsSQL VARCHAR(10000)	
+	)
+	BEGIN
+	
+		DECLARE UsrC integer;	
+		DECLARE ColName,IdxName VARCHAR(10000);
+		DECLARE SqlStr,SqlStr1, SqlStr2, IndexSQLStr, ResultSQLStr VARCHAR(10000);
+		DECLARE C1 CURSOR FOR S1;
+		DECLARE C2 CURSOR FOR S2;
+
+		IF  COALESCE (GENTYPE,0) = 0   then Set UsrC=1/(1-1)  ;  end if;
+		IF  COALESCE (DBSNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+		IF  COALESCE (TABNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+		
+		SET ResultSQLStr='';
+		
+		IF (GENTYPE = 1) THEN
+		
+			SET SqlStr = 'SELECT TRIM(ColumnName) FROM DBC.STATSV WHERE ColumnName IS NOT NULL AND DatabaseName=? AND TableName=? ORDER BY StatsId';
+			PREPARE S1 FROM SqlStr;
+			OPEN C1 USING DBSNAME,TABNAME;
+			
+			get_columns: LOOP
+				FETCH C1 INTO ColName;
+				IF (SQLCODE <> 0) THEN 
+					LEAVE get_columns;
+				ELSE
+					SET ResultSQLStr=ResultSQLStr || ',COLUMN(' || TRIM(ColName) || ')';
+				END IF;
+			END LOOP get_columns;
+			CLOSE C1;
+			SET CollectStatsSQL='COLLECT STATISTICS ' || SUBSTRING(ResultSQLStr FROM 2) || ' ON ' || TRIM(TGTDBSNAME) || '."' || TABNAME || '";' ;
+		
+		END IF;
+	
+	
+	
+	
+		IF (GENTYPE = 2) THEN
+		
+			SET SqlStr1 = 'SELECT TRIM(IndexName) AS IndexName from DBC.indices WHERE DatabaseName=? And TableName=? GROUP BY 1';
+			PREPARE S1 FROM SqlStr1;
+			OPEN C1 USING DBSNAME,TABNAME;
+			
+			get_index: LOOP
+				FETCH C1 INTO IdxName;
+				IF (SQLCODE <> 0) THEN 
+					LEAVE get_index;
+				ELSE
+					
+					SET SqlStr2 = 'SELECT TRIM(ColumnName) AS ColumnName from DBC.indices WHERE DatabaseName=? And TableName=? AND IndexName=?  ORDER BY ColumnPosition';
+					PREPARE S2 FROM SqlStr2;
+					OPEN C2 USING DBSNAME,TABNAME,IdxName;
+					SET IndexSQLStr='';
+					
+					get_columns: LOOP
+						FETCH C2 INTO ColName;
+						IF (SQLCODE <> 0) THEN 
+							LEAVE get_columns;
+						ELSE
+							SET IndexSQLStr=IndexSQLStr || ',' || TRIM(ColName);
+						END IF;
+					END LOOP get_columns;
+					CLOSE C2;
+					
+					SET ResultSQLStr=ResultSQLStr || ',COLUMN(' || SUBSTRING(IndexSQLStr FROM 2) || ')';
+					
+				END IF;
+			END LOOP get_index;
+			CLOSE C1;
+			SET CollectStatsSQL='COLLECT STATISTICS ' || SUBSTRING(ResultSQLStr FROM 2) || ' ON ' || TRIM(TGTDBSNAME) || '."' || TABNAME || '";' ;
+		
+		END IF;
+	
+	
+	END;
+--------------------------------------------------------------------------------
+
+SPLText
+REPLACE PROCEDURE CLARITY_DBA_MAINT.CLARITY_UPG_CREATE_MIGSCRIPTS
+	(
+	IN DBSNAME VARCHAR(30),
+	IN TABNAME VARCHAR(30),
+	IN TGDBSNAME VARCHAR(30),
+	IN TGTABNAME VARCHAR(30),
+	OUT DataMigSQL VARCHAR(10000)	
+	)
+	BEGIN
+	
+		DECLARE UsrC integer;	
+		DECLARE ColName,ColType,TgtColType VARCHAR(30);
+		DECLARE SqlStr,TgtSQLStr,ResultSQLStr1, ResultSQLStr2 VARCHAR(10000);
+		DECLARE C1 CURSOR FOR S1;
+		DECLARE C2 CURSOR FOR S2;
+
+
+		IF  COALESCE (DBSNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+		IF  COALESCE (TABNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+		IF  COALESCE (TGDBSNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+		IF  COALESCE (TGTABNAME,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+		
+		SET ResultSQLStr1='';
+		SET ResultSQLStr2='';
+			
+			SET SqlStr = 'SELECT TRIM(ColumnName), TRIM(ColumnType) FROM DBC.COLUMNSV WHERE ColumnName IS NOT NULL AND DatabaseName=? AND TableName=? ORDER BY ColumnId';
+			PREPARE S1 FROM SqlStr;
+			OPEN C1 USING DBSNAME,TABNAME;
+			
+			get_columns: LOOP
+				FETCH C1 INTO ColName,ColType;
+				IF (SQLCODE <> 0) THEN 
+					LEAVE get_columns;
+				ELSE
+					SET ResultSQLStr1=ResultSQLStr1 || ',"' || TRIM(ColName) || '"';		
+					IF ((ColType = 'I') OR (ColType = 'D')) THEN
+					
+						SET TgtSQLStr='SELECT TRIM(ColumnType) FROM DBC.COLUMNSV WHERE ColumnName IS NOT NULL AND DatabaseName=? AND TableName=? AND ColumnName=?';
+						PREPARE S2 FROM TgtSQLStr;
+						OPEN C2 USING TGDBSNAME,TGTABNAME,ColName;
+						FETCH C2 INTO TgtColType;
+						
+						IF ((TgtColType = 'CV') AND (ColType = 'I'))  THEN
+							SET ResultSQLStr2=ResultSQLStr2 || ',TRIM("' || TRIM(ColName) || '")';
+						END IF;
+						
+						IF ((TgtColType = 'CV') AND (ColType = 'D')) THEN
+							SET ResultSQLStr2=ResultSQLStr2 || ',TRIM(TRIM(TRAILING ''.'' FROM "' || TRIM(ColName) || '"))';
+						END IF;
+						
+						IF (TgtColType <> 'CV') THEN
+							SET ResultSQLStr2=ResultSQLStr2 || ',"' || TRIM(ColName) || '"';
+						END IF;
+						
+						CLOSE C2;
+
+					ELSE
+						SET ResultSQLStr2=ResultSQLStr2 || ',"' || TRIM(ColName) || '"';
+					END IF;
+				END IF;
+			END LOOP get_columns;
+			CLOSE C1;
+			
+			SET DataMigSQL='INSERT INTO ' || TRIM(TGDBSNAME) || '."' || TRIM(TGTABNAME) || '"(' || SUBSTRING(ResultSQLStr1 FROM 2) || ')' || ' SELECT ' ||  SUBSTRING(ResultSQLStr2 FROM 2) || ' FROM ' || TRIM(DBSNAME) || '."' || TRIM(TABNAME) || '";' ;
+	
+	
+	END;
+--------------------------------------------------------------------------------
+
+SPLText
+REPLACE PROCEDURE CLARITY_DBA_MAINT.CLARITY_UPG_FIND_RUN_ID
+	( 
+	IN CHGLIST VARCHAR(50),
+	IN REG VARCHAR(15),
+	IN PROFILENM VARCHAR(15),
+	IN STGLIST VARCHAR(50),
+	IN BKUPLIST VARCHAR(50),
+	IN TICKETNO VARCHAR(20),
+	IN DEVHOST VARCHAR(50),
+	IN PRODHOST VARCHAR(50),
+	OUT FinalRunId integer
+	)
+	
+	BEGIN
+	DECLARE UsrC integer;	
+	DECLARE RunId integer;
+	DECLARE NewRunId integer;
+	DECLARE SqlStr VARCHAR(1000);
+	DECLARE C1 CURSOR FOR S1;
+
+	IF  COALESCE (CHGLIST,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+	IF  COALESCE (REG,'') = ''   then Set UsrC=1/(1-1)  ;  end if;
+	
+	SET SqlStr = 'SELECT COALESCE(MAX(RUN_ID),0) FROM CLARITY_DBA_MAINT.CLARITY_UPG_SUMMARY WHERE CHG_LIST_NM=?';
+	PREPARE S1 FROM SqlStr;
+	OPEN C1 USING CHGLIST;
+	FETCH C1 INTO RunId;
+	CLOSE C1;
+
+	
+	IF RunId <> 0 then
+			SET NewRunId=RunId;
+	ELSE
+		SET SqlStr = 'SELECT COALESCE(MAX(RUN_ID),0) FROM CLARITY_DBA_MAINT.CLARITY_UPG_SUMMARY WHERE CHG_LIST_NM <> ?';
+		PREPARE S1 FROM SqlStr;
+		OPEN C1 USING CHGLIST;
+		FETCH C1 INTO RunId;
+		SET NewRunId=RunId + 1;
+		CLOSE C1;
+
+		CALL DBC.SysExecSQL
+		( 'INSERT	INTO CLARITY_DBA_MAINT.CLARITY_UPG_SUMMARY (RUN_ID, RELEASE_DT, DBA_USER_ID, RUN_TS, CHG_LIST_NM, REGION, PROFILE_NM,STG_LIST_NM,BKUP_LIST_NM,TICKET_NO, DEV_HOST,PROD_HOST) VALUES	( '
+		|| NewRunId || ',current_date,user,current_timestamp' || ',''' || CHGLIST || ''',''' || REG || ''',''' || PROFILENM || ''',''' || STGLIST  || ''','''  || BKUPLIST || ''',''' || TICKETNO  || ''',''' || DEVHOST  || ''',''' || PRODHOST  ||  ''')' ) ;
+		
+	
+	END IF;
+	
+		SET FinalRunId=NewRunId;
+		
+	END;

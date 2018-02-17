@@ -1,0 +1,29 @@
+DELETE FROM CLARITY_DBA_MAINT.QUERY_LOG_RESULTS;
+
+INSERT INTO CLARITY_DBA_MAINT.QUERY_LOG_RESULTS
+SELECT 
+TRIM(QLT.UserName),
+QLT.StartTime, 
+QLT.SessionID, 
+QLT.RequestNum, 
+TRIM(QLT.AppID),
+QLT."ErrorCode", 
+TRIM(QLT.ErrorText), 
+QLT.NumResultRows,
+TRIM(OT.ObjectDatabaseName), 
+TRIM(OT.ObjectTableName), 
+TRIM(OT.ObjectType), 
+OT.FreqofUse, 
+OT.TypeofUse
+FROM DBC.DBQLogTbl QLT
+JOIN DBC.DBQLObjTbl  OT  ON OT.QueryID=QLT.QueryId
+WHERE TRIM(QLT.UserName)='MY_NUID' 
+AND QLT.StartTime BETWEEN CAST('MY_START_DT MY_START_TM' AS TIMESTAMP(0)) 
+	              AND CAST('MY_END_DT MY_END_TM' AS TIMESTAMP(0)) 
+AND TRIM(QLT.AppID)='BTEQ'   
+AND TRIM(OT.ObjectType) <> 'Col'
+
+;     
+  
+
+

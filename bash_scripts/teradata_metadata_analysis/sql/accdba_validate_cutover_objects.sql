@@ -1,0 +1,138 @@
+SELECT 'Column Not in EP VIEW but present in Reporting' AS ERROR_DESC, TRIM(TableName),TRIM(ColumnName)
+FROM DBC.Columns B
+JOIN CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+ON  TRIM(A.UPG_TABLE_NAME)=TRIM(B.TableName)
+   AND TRIM(A.PROD_DB)=TRIM(B.DatabaseName)
+ AND A.RUN_ID=MY_RUN_ID
+ AND A.CHANGE_TYPE NOT IN ('Table Drop','View Only','Rename Table')
+ 
+ MINUS
+ 
+SELECT 'Column Not in EP VIEW but present in Reporting', TRIM(TableName),TRIM(ColumnName)
+FROM DBC.Columns B
+JOIN CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+ON  TRIM(A.UPG_TABLE_NAME)=TRIM(B.TableName)
+   AND TRIM(A.EP_VIEW_DB)=TRIM(B.DatabaseName)
+ AND A.RUN_ID=MY_RUN_ID
+ AND A.CHANGE_TYPE NOT IN ('Table Drop','View Only','Rename Table')
+;
+ 
+ 
+SELECT 'Column Not in USER VIEW but present in Reporting' AS ERROR_DESC,TRIM(TableName),TRIM(ColumnName)
+FROM DBC.Columns B
+JOIN CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+ON  TRIM(A.UPG_TABLE_NAME)=TRIM(B.TableName)
+   AND TRIM(A.PROD_DB)=TRIM(B.DatabaseName)
+ AND A.RUN_ID=MY_RUN_ID
+ AND A.CHANGE_TYPE NOT IN ('Table Drop','View Only','Rename Table')
+ 
+ MINUS
+ 
+SELECT 'Column Not in USER VIEW but present in Reporting',TRIM(TableName),TRIM(ColumnName)
+FROM DBC.Columns B
+JOIN CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+ON  TRIM(A.UPG_TABLE_NAME)=TRIM(B.TableName)
+   AND TRIM(A.USER_VIEW_DB)=TRIM(B.DatabaseName)
+ AND A.RUN_ID=MY_RUN_ID
+ AND A.CHANGE_TYPE NOT IN ('Table Drop','View Only','Rename Table')
+;
+ 
+  
+SELECT 'Column Not in USER VIEW but present in EP VIEW' AS ERROR_DESC,TRIM(TableName),TRIM(ColumnName)
+FROM DBC.Columns B
+JOIN CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+ON  TRIM(A.UPG_TABLE_NAME)=TRIM(B.TableName)
+   AND TRIM(A.EP_VIEW_DB)=TRIM(B.DatabaseName)
+ AND A.RUN_ID=MY_RUN_ID
+ AND A.CHANGE_TYPE NOT IN ('Table Drop','View Only','Rename Table')
+ 
+ MINUS
+ 
+SELECT 'Column Not in USER VIEW but present in EP VIEW', TRIM(TableName),TRIM(ColumnName)
+FROM DBC.Columns B
+JOIN CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+ON  TRIM(A.UPG_TABLE_NAME)=TRIM(B.TableName)
+   AND TRIM(A.USER_VIEW_DB)=TRIM(B.DatabaseName)
+ AND A.RUN_ID=MY_RUN_ID
+ AND A.CHANGE_TYPE NOT IN ('Table Drop','View Only','Rename Table')
+;
+ 
+ 
+SELECT 'Column Mismatch between Staging and TPF Staging' AS Error_Desc,
+CASE WHEN 'MY_REGION'='SC' THEN
+		CASE WHEN SUBSTRING(TRIM(A.DatabaseName) FROM 8 FOR 1)='_' THEN 'LEAD' 
+		ELSE SUBSTRING(TRIM(A.DatabaseName) FROM 8 FOR 1) END 
+	WHEN 'MY_REGION'='NC' THEN
+		CASE WHEN SUBSTRING(TRIM(A.DatabaseName) FROM 9 FOR 1)='_' THEN 'LEAD' 
+		ELSE SUBSTRING(TRIM(A.DatabaseName) FROM 9 FOR 1) END 
+	ELSE
+	''
+END
+AS DeploymentId,
+TRIM(A.TableName) AS TableName,TRIM(A.ColumnName) AS ColumnName,
+ColumnFormat, ColumnLength, ColumnType, Nullable, DecimalTotalDigits, DecimalFractionalDigits
+FROM DBC.Columns A
+WHERE TRIM(A.DatabaseName) IN ('MYCPPMY_REGION_S','MYCPPMY_REGIONA_S','MYCPPMY_REGIONB_S','MYCPPMY_REGIONC_S','MYCPPMY_REGIOND_S','MYCPPMY_REGIONE_S','MYCPPMY_REGIONF_S')
+AND EXISTS
+(
+SEL 1 FROM DBC.TablesV B 
+WHERE TRIM(B.DatabaseName) IN ('MYCPPMY_REGION_TPF_S','MYCPPMY_REGIONA_TPF_S','MYCPPMY_REGIONB_TPF_S','MYCPPMY_REGIONC_TPF_S'
+'MYCPPMY_REGIOND_TPF_S','MYCPPMY_REGIONE_TPF_S','MYCPPMY_REGIONF_TPF_S')
+AND TRIM(A.TableName)=TRIM(B.TableName)
+AND (('MY_REGION'='SC' AND SUBSTRING(TRIM(A.DatabaseName) FROM 8 FOR 1)=SUBSTRING(TRIM(B.DatabaseName) FROM 8 FOR 1)) OR
+     ('MY_REGION'='NC' AND SUBSTRING(TRIM(A.DatabaseName) FROM 9 FOR 1)=SUBSTRING(TRIM(B.DatabaseName) FROM 8 FOR 1)) )
+)
+
+MINUS
+
+SELECT 'Column Mismatch between Staging and TPF Staging' AS Error_Desc,
+CASE WHEN SUBSTRING(TRIM(A.DatabaseName) FROM 8 FOR 1)='_' THEN 'LEAD' 
+ELSE SUBSTRING(TRIM(A.DatabaseName) FROM 8 FOR 1) END AS DeploymentId,
+TRIM(A.TableName) AS TableName,TRIM(A.ColumnName) AS ColumnName,
+ColumnFormat, ColumnLength, ColumnType, Nullable, DecimalTotalDigits, DecimalFractionalDigits
+FROM DBC.Columns A
+WHERE TRIM(A.DatabaseName) IN ('MYCPPMY_REGION_TPF_S','MYCPPMY_REGIONA_TPF_S','MYCPPMY_REGIONB_TPF_S','MYCPPMY_REGIONC_TPF_S'
+'MYCPPMY_REGIOND_TPF_S','MYCPPMY_REGIONE_TPF_S','MYCPPMY_REGIONF_TPF_S')
+;
+
+
+
+SELECT 'Column Mismatch between Reporting and TPF Reporting' AS Error_Desc,
+CASE WHEN 'MY_REGION'='SC' THEN
+		CASE WHEN SUBSTRING(TRIM(A.DatabaseName) FROM 8 FOR 1)='_' THEN 'LEAD' 
+		ELSE SUBSTRING(TRIM(A.DatabaseName) FROM 8 FOR 1) END 
+	WHEN 'MY_REGION'='NC' THEN
+		CASE WHEN SUBSTRING(TRIM(A.DatabaseName) FROM 9 FOR 1)='_' THEN 'LEAD' 
+		ELSE SUBSTRING(TRIM(A.DatabaseName) FROM 9 FOR 1) END 
+	ELSE
+	''
+END
+AS DeploymentId,
+TRIM(A.TableName) AS TableName,TRIM(A.ColumnName) AS ColumnName,
+ColumnFormat, ColumnLength, ColumnType, Nullable, DecimalTotalDigits, DecimalFractionalDigits
+FROM DBC.Columns A
+WHERE TRIM(A.DatabaseName) IN ('MYCPPMY_REGION_T','MYCPPMY_REGIONA_T','MYCPPMY_REGIONB_T','MYCPPMY_REGIONC_T','MYCPPMY_REGIOND_T','MYCPPMY_REGIONE_T','MYCPPMY_REGIONF_T')
+AND EXISTS
+(
+SEL 1 FROM DBC.TablesV B 
+WHERE TRIM(B.DatabaseName) IN ('MYCPPMY_REGION_TPF_T','MYCPPMY_REGIONA_TPF_T','MYCPPMY_REGIONB_TPF_T','MYCPPMY_REGIONC_TPF_T'
+'MYCPPMY_REGIOND_TPF_T','MYCPPMY_REGIONE_TPF_T','MYCPPMY_REGIONF_TPF_T')
+AND TRIM(A.TableName)=TRIM(B.TableName)
+AND (('MY_REGION'='SC' AND SUBSTRING(TRIM(A.DatabaseName) FROM 8 FOR 1)=SUBSTRING(TRIM(B.DatabaseName) FROM 8 FOR 1)) OR
+     ('MY_REGION'='NC' AND SUBSTRING(TRIM(A.DatabaseName) FROM 9 FOR 1)=SUBSTRING(TRIM(B.DatabaseName) FROM 8 FOR 1)) )
+)
+
+MINUS
+
+SELECT 'Column Mismatch between Reporting and TPF Reporting',
+CASE WHEN SUBSTRING(TRIM(DatabaseName) FROM 8 FOR 1)='_' THEN 'LEAD' 
+ELSE SUBSTRING(TRIM(DatabaseName) FROM 8 FOR 1) END AS DeploymentId,
+TRIM(TableName) AS TableName,TRIM(ColumnName) AS ColumnName,
+ColumnFormat, ColumnLength, ColumnType, Nullable, DecimalTotalDigits, DecimalFractionalDigits
+FROM DBC.Columns A
+WHERE TRIM(A.DatabaseName) IN ('MYCPPMY_REGION_TPF_T','MYCPPMY_REGIONA_TPF_T','MYCPPMY_REGIONB_TPF_T','MYCPPMY_REGIONC_TPF_T'
+'MYCPPMY_REGIOND_TPF_T','MYCPPMY_REGIONE_TPF_T','MYCPPMY_REGIONF_TPF_T')
+;
+
+
+ 

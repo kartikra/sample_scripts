@@ -1,0 +1,27 @@
+---
+VERSION: 1.0.0.1
+DATABASE: gp_db
+USER: clm_rcvy
+HOST: dwtestgp.mycompany.com
+PORT: 5432
+GPLOAD:
+   INPUT:
+     - SOURCE:
+         LOCAL_HOSTNAME:
+           - smdw-1
+           - smdw-2
+           - smdw-3
+           - smdw-4
+         FILE:
+           - $PMDIR/SrcFiles/amsprd_gpload_err.txt
+     - FORMAT: text
+     - HEADER: false
+     - DELIMITER: '|'
+     - NULL_AS: ''
+     - ESCAPE: 'OFF'
+     - ERROR_LIMIT: 10
+     - ERROR_TABLE: clm_rcvy_utlty.wadw_gpload_err
+   OUTPUT:
+     - TABLE: clm_rcvy_utlty.wadw_gpload_err
+     - MODE: INSERT
+

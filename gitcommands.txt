@@ -1,0 +1,8 @@
+git status
+
+git add filename  -- untracked changes to stage area
+git add dir/
+git rm -r dir/
+
+git commit -m "message" -- stage to commited state
+git push origin master     -- whatever is commited will be pushed

@@ -1,0 +1,624 @@
+-------------------------------------------------------------------------------------
+--  VITAL KEYWORDS in DB Change List !!!
+--
+--    "Table Add", "Column Add", "Column Datatype Difference", "PI Change"
+--    "Table Drop", "View Only", "Rename Table"
+--
+--  VITAL KEYWORDS in BACKUP List !!!
+--    "Reasonable Volume"
+--
+--  VITAL KEYWORDS in DB Change Staging Table List !!!
+--   "CREATE", "DROP"
+-------------------------------------------------------------------------------------
+--
+-- Variable Replacement List
+-- MY_RUN_ID
+-- MY_REG
+-- MY_WITS_DB
+-- MY_REPORT_DB
+-- MY_WITS_A_DB, MY_WITS_B_DB, MY_WITS_C_DB, MY_WITS_D_DB, MY_WITS_E_DB, MY_WITS_F_DB, MY_WITS_G_DB
+-- MY_CALC_A_DB, MY_CALC_B_DB, MY_CALC_C_DB, MY_CALC_D_DB, MY_CALC_E_DB, MY_CALC_F_DB, MY_CALC_G_DB
+-- MY_MATVIEW_DB1
+-- MY_MATVIEW_DB2
+-- MY_EP_VIEW
+-- MY_EP_VIEW1
+-- MY_EP_VIEW2
+-- MY_USER_VIEW
+-- MY_NUID
+-------------------------------------------------------------------------------------
+
+	-- Load the Upgrade Change List Data
+	DELETE FROM CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST WHERE RUN_ID=MY_RUN_ID;
+	
+
+	INSERT INTO CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST
+	SELECT
+	MY_RUN_ID AS RUN_ID, 
+	A.CHANGE_TYPE, 
+	A.UPG_TABLE_NAME, 
+	A.UPG_COLUMN_NAME,
+	A.PROD_DEF, A.WITS_DEF, 
+	CASE 
+		WHEN TRIM(B.DatabaseName)='MY_CALC_A_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_A_DB'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_B_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_B_DB'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_C_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_C_DB'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_D_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_D_DB'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_E_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_E_DB'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_F_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_F_DB'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_G_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_G_DB'
+	ELSE
+		'MY_WITS_DB' 
+	END AS WITS_DB,
+	CASE 
+		WHEN TRIM(B.DatabaseName)='MY_CALC_A_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_A'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_B_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_B'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_C_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_C'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_D_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_D'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_E_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_E'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_F_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_F'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_G_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_G'
+	ELSE
+		CASE
+			WHEN CHANGE_TYPE='Table Add' THEN  'MYCPMY_REG_UPG_AK_Tab_Add' 
+			WHEN CHANGE_TYPE='Column Add' THEN  'MYCPMY_REG_UPG_AK_Tab_Change' 
+			WHEN CHANGE_TYPE='PI Change' THEN  'MYCPMY_REG_UPG_AK_PI_Change'
+			WHEN CHANGE_TYPE='Table Drop' THEN  ''
+			WHEN CHANGE_TYPE='Rename Table' THEN  ''
+			WHEN CHANGE_TYPE='VIEW ONLY' THEN  ''
+		ELSE  'MYCPMY_REG_UPG_AK_Dtype_Change'  
+		END
+	END AS TEMP_DB, 
+	TRIM(B.DatabaseName) AS PROD_DB,
+	A.DEPLOY_TABLE_IND,
+	A.TPF_TABLE_IND, 
+	TRIM(C.DatabaseName) AS EP_VIEW_DB,
+	TRIM(D.DatabaseName) AS USER_VIEW_DB,
+	'MY_NUID' AS DBA_USER_ID,
+	current_timestamp AS RUN_TS
+
+	FROM CLARITY_DBA_MAINT.UPG_CHG_LIST A
+
+	LEFT JOIN DBC.TablesV B ON A.UPG_TABLE_NAME=TRIM(B.TableName) AND B.TableKind='T'
+	AND TRIM(B.DatabaseName) IN ('MY_REPORT_DB')
+	
+	LEFT JOIN DBC.TablesV C ON A.UPG_TABLE_NAME=TRIM(C.TableName) AND C.TableKind='V'
+	AND TRIM(C.DatabaseName) IN ('MY_EP_VIEW','MY_EP_VIEW1','MY_EP_VIEW2' )
+
+	LEFT JOIN DBC.TablesV D ON A.UPG_TABLE_NAME=TRIM(D.TableName) AND D.TableKind='V'
+	AND TRIM(D.DatabaseName) IN ('MY_USER_VIEW')
+
+	WHERE COALESCE(TRIM(A.DEPLOY_TABLE_IND),'') <> 'Y'
+	;
+	
+	
+	-- Add Calcultated Reporting Tables in NC and SC
+	INSERT INTO CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST
+	SELECT
+	MY_RUN_ID AS RUN_ID, 
+	A.CHANGE_TYPE, 
+	A.UPG_TABLE_NAME, 
+	A.UPG_COLUMN_NAME,
+	A.PROD_DEF, A.WITS_DEF, 
+	CASE 
+		WHEN TRIM(B.DatabaseName)='MY_CALC_A_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_A_DB'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_B_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_B_DB'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_C_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_C_DB'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_D_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_D_DB'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_E_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_E_DB'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_F_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_F_DB'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_G_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MY_WITS_G_DB'
+	ELSE
+		'MY_WITS_DB' 
+	END AS WITS_DB,
+	CASE 
+		WHEN TRIM(B.DatabaseName)='MY_CALC_A_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_A'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_B_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_B'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_C_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_C'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_D_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_D'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_E_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_E'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_F_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_F'
+		WHEN TRIM(B.DatabaseName)='MY_CALC_G_DB' AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','VIEW ONLY') THEN 'MYCPMY_REG_UPG_AK_Tab_Change_G'
+	ELSE
+		CASE
+			WHEN CHANGE_TYPE='Table Add' THEN  'MYCPMY_REG_UPG_AK_Tab_Add' 
+			WHEN CHANGE_TYPE='Column Add' THEN  'MYCPMY_REG_UPG_AK_Tab_Change' 
+			WHEN CHANGE_TYPE='PI Change' THEN  'MYCPMY_REG_UPG_AK_PI_Change'
+			WHEN CHANGE_TYPE='Table Drop' THEN  ''
+			WHEN CHANGE_TYPE='Rename Table' THEN  ''
+			WHEN CHANGE_TYPE='VIEW ONLY' THEN  ''
+		ELSE  'MYCPMY_REG_UPG_AK_Dtype_Change'  
+		END
+	END AS TEMP_DB, 
+	TRIM(B.DatabaseName) AS PROD_DB,
+	A.DEPLOY_TABLE_IND,
+	A.TPF_TABLE_IND, 
+	TRIM(C.DatabaseName) AS EP_VIEW_DB,
+	TRIM(D.DatabaseName) AS USER_VIEW_DB,
+	'MY_NUID' AS DBA_USER_ID,
+	current_timestamp AS RUN_TS
+
+	FROM CLARITY_DBA_MAINT.UPG_CHG_LIST A
+
+	LEFT JOIN DBC.TablesV B ON A.UPG_TABLE_NAME=TRIM(B.TableName) AND B.TableKind='T'
+	AND TRIM(B.DatabaseName) IN ('MY_CALC_A_DB','MY_CALC_B_DB','MY_CALC_C_DB','MY_CALC_D_DB','MY_CALC_E_DB','MY_CALC_F_DB','MY_CALC_G_DB')
+	
+	LEFT JOIN DBC.TablesV C ON A.UPG_TABLE_NAME=TRIM(C.TableName) AND C.TableKind='V'
+	AND TRIM(C.DatabaseName) IN ('MY_EP_VIEW','MY_EP_VIEW1','MY_EP_VIEW2' )
+
+	LEFT JOIN DBC.TablesV D ON A.UPG_TABLE_NAME=TRIM(D.TableName) AND D.TableKind='V'
+	AND TRIM(D.DatabaseName) IN ('MY_USER_VIEW')
+
+	WHERE COALESCE(TRIM(A.DEPLOY_TABLE_IND),'') = 'Y' AND 'MY_REG' IN ('NC','SC')
+	;
+	
+	
+	
+	-- Identify Changes other than Table Add and Column Add
+
+	DELETE CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_DTYPE_CHG WHERE RUN_ID=MY_RUN_ID;
+
+	INSERT INTO CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_DTYPE_CHG
+
+	SELECT  TEMP.RUN_ID, TEMP.UPG_TABLE_NAME, TEMP.WITS_DB, TEMP.TEMP_DB
+	FROM
+	(
+		SELECT  A.RUN_ID, A.UPG_TABLE_NAME, A.WITS_DB, A.TEMP_DB
+		FROM  CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+		WHERE  RUN_ID=MY_RUN_ID
+				AND A.CHANGE_TYPE NOT IN ('Table Drop','Rename Table','View Only')
+		
+		MINUS
+		
+		/* Tables Added */
+		SELECT  A.RUN_ID,A.UPG_TABLE_NAME, A.WITS_DB, A.TEMP_DB
+		FROM  CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+		WHERE CHANGE_TYPE='Table Add'  AND RUN_ID=MY_RUN_ID
+		
+		MINUS
+		
+		/* Tables Changes Only Add Columns and No Datatype Changes */
+		SELECT  A.RUN_ID,A.UPG_TABLE_NAME, A.WITS_DB, A.TEMP_DB
+		FROM  CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+		WHERE CHANGE_TYPE='Column Add'  AND RUN_ID=MY_RUN_ID
+		AND NOT EXISTS
+		(  
+			SELECT  B.UPG_TABLE_NAME FROM  CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST B 
+			WHERE  B.CHANGE_TYPE NOT IN ('PI Change','Column Add','Table Drop','Rename Table','View Only') 
+			AND RUN_ID=MY_RUN_ID AND B.UPG_TABLE_NAME=A.UPG_TABLE_NAME
+		)  
+
+	) TEMP;
+
+
+
+
+	DELETE FROM CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_CHG_CTGRY WHERE RUN_ID=MY_RUN_ID;
+
+	-- Table Add --	
+
+	INSERT INTO CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_CHG_CTGRY
+	SELECT  A.RUN_ID,A.UPG_TABLE_NAME, A.CHANGE_TYPE, A.PROD_DEF, A.WITS_DEF,
+                A.WITS_DB, A.TEMP_DB, A.PROD_DB, 
+		1 AS CHG_CTGRY
+
+	FROM  CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+	WHERE A.CHANGE_TYPE='Table Add'  AND A.RUN_ID=MY_RUN_ID
+
+	GROUP BY 1,2,3,4,5,6,7,8,9;
+
+	
+	-- PI Change --	
+
+	INSERT INTO CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_CHG_CTGRY
+	SELECT  A.RUN_ID,A.UPG_TABLE_NAME, A.CHANGE_TYPE, A.PROD_DEF, A.WITS_DEF,
+                A.WITS_DB, A.TEMP_DB, A.PROD_DB, 
+		4 AS CHG_CTGRY
+
+	FROM  CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+	WHERE A.CHANGE_TYPE='PI Change'  AND A.RUN_ID=MY_RUN_ID
+
+	GROUP BY 1,2,3,4,5,6,7,8,9;
+	
+	
+	
+	-- Dtype Changes --
+
+	INSERT INTO CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_CHG_CTGRY
+
+	SELECT DISTINCT B.RUN_ID, B.UPG_TABLE_NAME, B.CHANGE_TYPE, B.PROD_DEF, B.WITS_DEF, 
+            B.WITS_DB, B.TEMP_DB, B.PROD_DB,
+		 MAX(CASE WHEN PROD_DEF LIKE 'VARCHAR%' AND WITS_DEF LIKE 'VARCHAR%'    THEN 3
+			WHEN PROD_DEF LIKE 'INTEGER%' AND WITS_DEF LIKE 'INTEGER%'  THEN 3
+			WHEN PROD_DEF LIKE 'TIMESTAMP%' AND WITS_DEF LIKE 'TIMESTAMP%'  THEN 3
+			WHEN PROD_DEF LIKE 'DECIMAL%' AND WITS_DEF LIKE 'DECIMAL%'    THEN 3
+			WHEN WITS_DEF LIKE 'DATE%'    AND PROD_DEF LIKE 'DATE%'   THEN 3
+			WHEN WITS_DEF LIKE 'FLOAT%'    AND PROD_DEF LIKE 'FLOAT%'   THEN 3
+
+			WHEN PROD_DEF LIKE 'INTEGER%' AND WITS_DEF LIKE 'VARCHAR%'   THEN 3
+			WHEN PROD_DEF LIKE 'DECIMAL%' AND WITS_DEF LIKE 'VARCHAR%'   THEN 3
+
+			WHEN PROD_DEF LIKE 'INTEGER%' AND WITS_DEF LIKE 'DECIMAL%'   THEN 3
+			WHEN PROD_DEF LIKE 'INTEGER%' AND WITS_DEF LIKE 'FLOAT%'   THEN 3
+			WHEN PROD_DEF LIKE 'DECIMAL%' AND WITS_DEF LIKE 'INTEGER%'  THEN 3
+			WHEN PROD_DEF LIKE 'DECIMAL%' AND WITS_DEF LIKE 'FLOAT%'   THEN 3
+			WHEN PROD_DEF LIKE 'FLOAT%' AND WITS_DEF LIKE 'INTEGER%'  THEN 3
+			WHEN PROD_DEF LIKE 'FLOAT%' AND WITS_DEF LIKE 'DECIMAL%'  THEN 3
+			WHEN PROD_DEF LIKE 'DATE%'    AND WITS_DEF LIKE 'VARCHAR%'  THEN 3
+
+			-- In these cases conversion has been built in the script. No Need to review
+			WHEN PROD_DEF LIKE 'INTEGER%' AND WITS_DEF LIKE 'VARCHAR%'  THEN 3
+			WHEN PROD_DEF LIKE 'DECIMAL%' AND WITS_DEF LIKE 'VARCHAR%'  THEN 3
+
+		   ELSE 4   
+		  END) OVER (PARTITION BY B.UPG_TABLE_NAME) CHG_CTGRY   /* To Idenitfy Scenarios that may need a manual review */
+		
+	FROM CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_DTYPE_CHG A
+	JOIN   CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST B ON A.RUN_ID=B.RUN_ID AND A.UPG_TABLE_NAME=B.UPG_TABLE_NAME
+			AND B.CHANGE_TYPE NOT IN ('Table Add','Column Add','PI Change','Table Drop','Rename Table','View Only')
+			AND A.RUN_ID=MY_RUN_ID AND B.RUN_ID=MY_RUN_ID
+	AND NOT EXISTS
+	(  
+		SELECT  C.UPG_TABLE_NAME FROM  CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_CHG_CTGRY C
+		WHERE C.RUN_ID=MY_RUN_ID AND C.UPG_TABLE_NAME=A.UPG_TABLE_NAME
+	)  
+	GROUP BY 1,2,3,4,5,6,7,8;	
+	
+
+	-- Column Add --
+
+	INSERT INTO CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_CHG_CTGRY
+	SELECT  A.RUN_ID,A.UPG_TABLE_NAME, A.CHANGE_TYPE, A.PROD_DEF, A.WITS_DEF,
+                A.WITS_DB, A.TEMP_DB, A.PROD_DB, 
+		2 AS CHG_CTGRY
+
+	FROM  CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+	WHERE A.CHANGE_TYPE='Column Add'  AND A.RUN_ID=MY_RUN_ID
+	AND NOT EXISTS
+		(  
+			SELECT  B.UPG_TABLE_NAME FROM  CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST B 
+			WHERE  B.CHANGE_TYPE IN ('Table Add','Table Drop','Rename Table','View Only') 
+			AND B.RUN_ID=MY_RUN_ID AND B.UPG_TABLE_NAME=A.UPG_TABLE_NAME
+		)  
+	AND NOT EXISTS
+		(  
+			SELECT  C.UPG_TABLE_NAME FROM  CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_CHG_CTGRY C
+			WHERE C.RUN_ID=MY_RUN_ID AND C.UPG_TABLE_NAME=A.UPG_TABLE_NAME
+		)  
+		
+		
+	GROUP BY 1,2,3,4,5,6,7,8,9;
+
+
+
+
+
+
+	------------- Find Space Taken in Prod and Space available in Temp ------------
+
+SELECT
+' Current Size of Temp Database ' || 
+TRIM(DatabaseName) || ' - ' AS SPACE_IN_TEMP
+,CAST(SUM(MaxPerm) /(1024*1024*1024) AS DECIMAL(21,3)) AS Max_Size_GB
+,CAST(SUM(CurrentPerm) / (1024*1024*1024) AS DECIMAL(21,3))  AS Current_Size_GB
+,CAST ((Max_Size_GB - Current_Size_GB) AS DECIMAL(21,3)) AS Available_Size_GB
+FROM DBC.DISKSPACE
+ WHERE DatabaseName IN
+  ( SEL TEMP_DB  FROM CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST 
+  WHERE TEMP_DB LIKE ANY ('MYCPMY_REG_UPG_AK_Tab_Change','MYCPMY_REG_UPG_AK_Dtype_Change',
+  'MYCPMY_REG_UPG_AK_PI_Change','MYCPMY_REG_UPG_AK_Tab_Change_%')  AND RUN_ID=MY_RUN_ID 
+  GROUP BY 1)
+GROUP BY 1
+ORDER BY 1;
+
+
+
+
+SELECT
+' Size taken in Production by tables in  ' || 
+TRIM(TEMP.TEMP_DB) ||  ' - ' AS SPACE_IN_PROD
+,CAST(SUM(TS.CurrentPerm) / (1024*1024*1024) AS DECIMAL(21,3)) AS Current_Size_GB
+,CAST(SUM(TS.PeakPerm) /(1024*1024*1024) AS DECIMAL(21,3)) AS Peak_Size_GB
+FROM DBC.TableSize TS
+JOIN  (
+		SEL PROD_DB,TEMP_DB, UPG_TABLE_NAME
+ 		FROM CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST
+ 		WHERE RUN_ID=MY_RUN_ID AND CHANGE_TYPE NOT IN ('Table Drop','Rename Table','View Only') 
+ 		GROUP BY 1,2,3
+         ) TEMP ON TRIM(TEMP.PROD_DB)=TRIM(TS.DatabaseName)
+                    AND TRIM(TEMP.UPG_TABLE_NAME)=TRIM(TS.TableName)
+GROUP BY 1
+ORDER BY 1;
+
+
+
+--------------------------------------------------------------------------------------------------------------------------
+-- WORKLOAD MANAGEMENT Queries
+CREATE VOLATILE TABLE WORKLOAD_MANAGEMENT AS
+(
+SELECT
+TRIM(TEMP.TEMP_DB) TEMP_DB
+,TRIM(TEMP.UPG_TABLE_NAME) UPG_TABLE_NAME
+,TRIM(CHG_CTGRY) CHG_CTGRY
+,CAST(SUM(TS.CurrentPerm) / (1024*1024*1024) AS DECIMAL(21,3)) AS Current_Size_GB
+FROM DBC.TableSize TS
+JOIN  (
+		SEL PROD_DB,TEMP_DB, UPG_TABLE_NAME,CHG_CTGRY
+ 		FROM CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_CHG_CTGRY
+ 		WHERE RUN_ID=MY_RUN_ID AND CHANGE_TYPE NOT IN ('Table Drop','Rename Table','View Only') 
+ 		GROUP BY 1,2,3,4
+         ) TEMP ON TRIM(TEMP.PROD_DB)=TRIM(TS.DatabaseName)
+                    AND TRIM(TEMP.UPG_TABLE_NAME)=TRIM(TS.TableName)
+GROUP BY 1,2,3
+)
+WITH DATA
+ON COMMIT PRESERVE ROWS;
+
+
+CREATE MULTISET VOLATILE TABLE WORKLOAD_MIGRATION_FILE AS
+(
+SELECT
+TEMP_DB, 
+UPG_TABLE_NAME, 
+CHG_CTGRY, 
+Current_Size_GB, 
+SUM(Current_Size_GB) OVER (PARTITION BY CHG_CTGRY ORDER BY Current_Size_GB DESC ROWS UNBOUNDED PRECEDING) category_moving_sum,
+RANK() OVER(PARTITION BY CHG_CTGRY ORDER BY Current_Size_GB DESC) category_rank,
+SUM(Current_Size_GB) OVER (PARTITION BY CHG_CTGRY) category_total,
+
+CASE WHEN CHG_CTGRY = 2 THEN
+			CASE WHEN category_rank=1 OR category_moving_sum <= category_total/2 THEN 1 ELSE 2 END
+	WHEN CHG_CTGRY = 3 THEN
+			CASE WHEN category_rank=1 OR category_moving_sum <= category_total/2 THEN 3 ELSE 4 END
+	 ELSE 5 END AS MIGRATION_FILE_NO
+
+FROM WORKLOAD_MANAGEMENT
+)
+WITH DATA
+ON COMMIT PRESERVE ROWS;
+
+
+CREATE MULTISET VOLATILE TABLE WORKLOAD_CUTOVER_FILE AS
+(
+SELECT
+TEMP_DB, 
+UPG_TABLE_NAME, 
+CHG_CTGRY, 
+Current_Size_GB, 
+SUM(Current_Size_GB) OVER (ORDER BY Current_Size_GB DESC ROWS UNBOUNDED PRECEDING) moving_sum,
+RANK() OVER(ORDER BY Current_Size_GB DESC) category_rank,
+ST.category_total,
+
+CASE WHEN category_rank=1 OR moving_sum BETWEEN 1 AND 0.2*category_total THEN 1
+	WHEN category_rank=2 OR moving_sum BETWEEN 0.2*category_total AND 0.4*category_total THEN 2
+	WHEN category_rank=3 OR moving_sum BETWEEN 0.4*category_total AND 0.6*category_total THEN 3
+	WHEN category_rank=4 OR moving_sum BETWEEN 0.6*category_total AND 0.8*category_total THEN 4
+	ELSE 5
+END AS CUTOVER_FILE_NO
+
+FROM WORKLOAD_MANAGEMENT
+JOIN ( SELECT SUM(Current_Size_GB) category_total FROM WORKLOAD_MANAGEMENT ) ST ON 1=1
+)
+WITH DATA
+ON COMMIT PRESERVE ROWS;
+
+
+--------------------------------------------------------------------------------------------------------------------------
+
+	
+	------------- Report Exisiting and NEW TPF Tables ------------
+	
+	SELECT  ( 'SCRIPT FOUND TPF ENTRY' ||  '|' || TRIM(B.DatabaseName) ||  '|' || TRIM(B.TableName)  ) AS QRY_RESULT
+	FROM CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A, DBC.Tables B
+	WHERE A.RUN_ID=MY_RUN_ID AND TRIM(A.UPG_TABLE_NAME)=TRIM(B.TableName) 
+	AND A.CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','View Only') 
+	AND SUBSTR(A.PROD_DB,1,7)=SUBSTR(B.DatabaseName,1,7)
+	AND B.DatabaseName LIKE 'MYCPP%TPF%T%'
+	AND 'MY_REG' IN ('NC','SC')
+	
+	UNION
+
+	SELECT   ( 'SCRIPT FOUND TPF ENTRY' ||  '|' || TRIM(PROD_DB)   || '|' ||  TRIM(UPG_TABLE_NAME) ) AS QRY_RESULT
+	FROM CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST 
+	WHERE RUN_ID=MY_RUN_ID AND TPF_TABLE_IND='Y'
+	     AND CHANGE_TYPE NOT IN ('Table Drop','Rename Table','View Only') 
+		 AND 'MY_REG' IN ('NC','SC')
+		 
+	
+	--  Consider DUMMY / NODUMMY Databases of MA
+	
+	UNION
+	
+	SELECT  ( 'SCRIPT FOUND TPF ENTRY' ||  '|' || TRIM(B.DatabaseName) ||  '|' || TRIM(B.TableName)  ) AS QRY_RESULT
+	FROM CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A, DBC.Tables B
+	WHERE A.RUN_ID=MY_RUN_ID AND TRIM(A.UPG_TABLE_NAME)=TRIM(B.TableName) 
+	AND A.CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','View Only') 
+	AND B.DatabaseName IN  ('MYCPPMA_T_DUMMY','MYCPPMA_T_NODUMMY')
+	AND 'MY_REG' IN ('MA')
+	;
+	
+	
+	
+		
+
+	-- Update Exisitng TPF Tables in the list. new TPF Tables have already been identified in the list
+
+	UPDATE CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST
+	SET TPF_TABLE_IND='Y'
+	WHERE RUN_ID=MY_RUN_ID AND 'MY_REG' IN ('NC','SC')
+	AND CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','View Only')
+	AND UPG_TABLE_NAME IN
+	(
+	SELECT TRIM(B.TableName)  
+	FROM CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A, DBC.Tables B
+	WHERE A.RUN_ID=MY_RUN_ID AND TRIM(A.UPG_TABLE_NAME)=TRIM(B.TableName) 
+	AND A.CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','View Only')
+	AND B.DatabaseName LIKE 'MYCPP%TPF%T%'
+	AND 'MY_REG' IN ('NC','SC')
+	GROUP BY 1
+	);
+
+
+	------------- Input File for Table DDL Generation ------------
+	SELECT   ( 'SCRIPT FOUND TABLE ENTRY' ||  '|' ||  TRIM(A.CHG_CTGRY)   || '|' ||  COALESCE(TRIM(A.WITS_DB),'')  || '|' ||  COALESCE(TRIM(A.TEMP_DB),'')  
+	|| '|' ||  COALESCE(TRIM(A.PROD_DB),'MY_REPORT_DB')  || '|' ||  TRIM(A.UPG_TABLE_NAME)
+    || '|' ||  COALESCE(TRIM(B.TPF_TABLE_IND),'') || '|' ||  COALESCE(TRIM(B.DEPLOY_TABLE_IND),'')	
+	|| '|' ||  TRIM(COALESCE(TRIM(W1.MIGRATION_FILE_NO),5)) || '|' ||  TRIM(COALESCE(TRIM(W2.CUTOVER_FILE_NO),1)) ) AS QRY_RESULT
+	   FROM CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_CHG_CTGRY A
+	   JOIN CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST B ON A.RUN_ID=B.RUN_ID AND A.UPG_TABLE_NAME=B.UPG_TABLE_NAME
+	   
+	   LEFT JOIN WORKLOAD_MIGRATION_FILE W1 ON A.UPG_TABLE_NAME=W1.UPG_TABLE_NAME AND A.TEMP_DB=W1.TEMP_DB
+	   LEFT JOIN WORKLOAD_CUTOVER_FILE W2 ON A.UPG_TABLE_NAME=W2.UPG_TABLE_NAME AND A.TEMP_DB=W2.TEMP_DB
+	   
+	   WHERE A.RUN_ID=MY_RUN_ID AND B.RUN_ID=MY_RUN_ID AND B.CHANGE_TYPE NOT IN ( 'Table Drop','Rename Table','View Only' )
+	GROUP BY 1;
+
+	
+	------------- Input File for Mat View Table DDL Generation ------------
+	 SELECT ( 'SCRIPT FOUND MAT VIEW TABLE ENTRY' ||  '|' || TRIM(TEMP.CHANGE_TYPE)  || '|' ||  COALESCE(TRIM(TEMP.WITS_DB),'')  || '|' ||  
+	  COALESCE(TRIM(TEMP.PROD_DB),'')  || '|' ||  TRIM(TEMP.UPG_TABLE_NAME) || '|' ||  
+	  TRIM(TEMP.MAT_VIEW_DB) || '|' ||  TRIM(TEMP.MAT_VIEW_TABLE) ) AS QRY_RESULTS
+
+	  FROM
+		(
+			SEL A.CHANGE_TYPE, A.UPG_TABLE_NAME, A.UPG_COLUMN_NAME, 
+			MIN(A.WITS_DB) AS WITS_DB, MIN(A.PROD_DB) AS PROD_DB,
+			C.DatabaseName AS MAT_VIEW_DB, C.TableName AS MAT_VIEW_TABLE
+
+			  FROM  CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A 
+				   
+					 JOIN DBC.TablesV C ON 
+							('1_' || A.UPG_TABLE_NAME = TRIM(C.TableName)
+							OR  '2_' ||  A.UPG_TABLE_NAME = TRIM(C.TableName) 
+							OR A.UPG_TABLE_NAME || '1' = TRIM(C.TableName) 
+							OR A.UPG_TABLE_NAME || '2' = TRIM(C.TableName) 
+							OR A.UPG_TABLE_NAME = TRIM(C.TableName)
+							)
+				AND C.TableKind='T'
+				AND TRIM(C.DatabaseName) IN ('MY_MATVIEW_DB1','MY_MATVIEW_DB2')
+				
+				WHERE A.RUN_ID=MY_RUN_ID
+				AND A.CHANGE_TYPE NOT IN ( 'Table Drop','Rename Table','View Only' )
+				   
+			GROUP BY 1,2,3,6,7
+		) TEMP
+		
+	GROUP BY 1;
+	
+
+	------------- Input File for View DDL Generation ------------
+	SELECT   ( 'SCRIPT FOUND VIEW ENTRY'   || '|' ||  TRIM(A.UPG_TABLE_NAME) || '|' ||  COALESCE(TRIM(B.EP_VIEW_DB),'MY_EP_VIEW') || '|' ||  COALESCE(TRIM(B.USER_VIEW_DB),'MY_USER_VIEW')  ) AS QRY_RESULT
+	   FROM CLARITY_DBA_MAINT.CLARITY_UPG_TABLES_CHG_CTGRY A
+	   JOIN CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST B ON A.RUN_ID=B.RUN_ID AND TRIM(A.UPG_TABLE_NAME)=TRIM(B.UPG_TABLE_NAME)
+           WHERE A.RUN_ID=MY_RUN_ID AND B.RUN_ID=MY_RUN_ID AND B.CHANGE_TYPE NOT IN ( 'Table Drop','Rename Table','View Only' )
+	GROUP BY 1;
+	
+	SELECT   ( 'SCRIPT FOUND VIEW ENTRY'   || '|' ||  TRIM(A.UPG_TABLE_NAME) || '|' ||  COALESCE(TRIM(A.EP_VIEW_DB),'') || '|' ||  COALESCE(TRIM(A.USER_VIEW_DB),'')  ) AS QRY_RESULT
+	   FROM CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+           WHERE A.RUN_ID=MY_RUN_ID AND A.CHANGE_TYPE='VIEW ONLY'
+	GROUP BY 1;
+
+	
+	-- DUMMY / NODUMMY of MA
+	SELECT  ( 'SCRIPT FOUND VIEW ENTRY' ||  '|' || TRIM(A.UPG_TABLE_NAME) || '|' ||  COALESCE(TRIM(B.DatabaseName),'') || '|' ||  COALESCE(TRIM(C.DatabaseName),'') ) AS QRY_RESULT
+	FROM CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+	LEFT JOIN DBC.Tables B ON TRIM(A.UPG_TABLE_NAME)=TRIM(B.TableName) AND B.DatabaseName IN  ('MYCPPMA_DUMMY','MYCPPMA_NODUMMY')
+	LEFT JOIN DBC.Tables C ON TRIM(A.UPG_TABLE_NAME)=TRIM(C.TableName) AND C.DatabaseName IN  ('MYCPMA_DUMMY','MYCPMA_NODUMMY')
+	
+	WHERE A.RUN_ID=MY_RUN_ID AND A.CHANGE_TYPE NOT IN ('Table Add','Table Drop','Rename Table','View Only') 
+		AND 'MY_REG' IN ('MA')
+	GROUP BY 1;
+	
+	   
+	------------- Input File for RENAME TABLE Generation ------------
+	SELECT  ( 'SCRIPT FOUND RENAME TABLE' || '|' ||  COALESCE(TRIM(PROD_DB),'') || '|' ||  TRIM(UPG_TABLE_NAME) || '|' ||   TRIM(UPG_COLUMN_NAME) ) AS QRY_RESULT
+	FROM CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST
+	WHERE RUN_ID=MY_RUN_ID AND CHANGE_TYPE='Rename Table'
+	GROUP BY 1;
+	
+	
+	--------------------------- Input File for Table Drop Generation --------------------------
+	-- Do not DROP in case table is being added or modified as part of the upgrade
+	
+	SELECT  ( 'SCRIPT FOUND DROP TABLE' || '|' ||  COALESCE(TRIM(A.PROD_DB),'') || '|' ||  TRIM(A.UPG_TABLE_NAME) ) AS QRY_RESULT
+	FROM CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST A
+	LEFT JOIN CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST B ON A.RUN_ID=B.RUN_ID AND B.CHANGE_TYPE='Rename Table' 
+	AND TRIM(A.UPG_TABLE_NAME)=TRIM(B.UPG_TABLE_NAME) AND TRIM(A.PROD_DB)=TRIM(B.PROD_DB)
+	LEFT JOIN CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST C ON A.RUN_ID=C.RUN_ID AND C.CHANGE_TYPE NOT IN ('Table Drop','Rename Table','VIEW ONLY')
+	AND TRIM(A.UPG_TABLE_NAME)=TRIM(C.UPG_TABLE_NAME) AND TRIM(A.PROD_DB)=TRIM(C.PROD_DB)
+	WHERE A.RUN_ID=MY_RUN_ID AND A.CHANGE_TYPE='Table Drop'
+	     AND B.UPG_TABLE_NAME IS NULL AND C.UPG_TABLE_NAME IS NULL
+	GROUP BY 1;
+		 
+	
+
+	------------- Report New and Existing TPF Stored Procedure ------------
+
+	SELECT  CAST(COALESCE(TRIM(A.DatabaseName),'NEW') AS VARCHAR(15)) AS OBJ_TYPE, ( 'SCRIPT FOUND IMPACTED TPF STORED PROCEDURE' ||  '|' || TRIM(B.CHANGE_TYPE) || '|' ||  TRIM(B.UPG_TABLE_NAME) ) AS QRY_RESULT
+	FROM CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST B 
+	LEFT JOIN DBC.TablesV A ON TRIM(B.UPG_TABLE_NAME)=TRIM(A.TableName) 	
+	                       AND  A.TableKind = 'P' AND A.DatabaseName LIKE 'MYCPPMY_REG%_SP' 
+  	WHERE B.RUN_ID=MY_RUN_ID AND B.TPF_TABLE_IND='Y' 
+  	AND  B.CHANGE_TYPE IN ('Table Add','Column Add')
+	AND SUBSTR(B.PROD_DB,1,6)=SUBSTR(A.DatabaseName,1,6)
+	AND 'MY_REG' IN ('NC','SC')
+ 	GROUP BY 1,2
+ 	ORDER BY 2,1;
+
+	
+	------------- Identify Impact to Materialized Views ------------
+    --- Check if the tables being changed were used to load any materialized views within the last 10 days
+	
+	CREATE VOLATILE TABLE IMPACT_LIST AS
+	(
+	
+	SELECT
+	SRC_CHG.CHANGE_TYPE,
+	SRC.ObjectDatabaseName SRC_DB,
+	SRC.ObjectTableName SRC_TAB,
+	DLT.UserName,
+	TGT.ObjectDatabaseName TGT_DB,
+	TGT.ObjectTableName TGT_TAB,
+	MAX(DLT.QueryId) AS QueryId
+
+	FROM PDCRINFO.DBQLObjTbl_HST TGT
+	JOIN PDCRINFO.DBQLogTbl_HST DLT ON DLT.QueryId=TGT.QueryId
+	AND TRIM(DLT.AppID)='BTEQ'
+	AND TRIM(DLT.StatementType)='INSERT'
+	AND TGT.Logdate >= current_date - 10
+	AND DLT.Logdate >= current_date - 10
+	JOIN PDCRINFO.DBQLObjTbl_HST SRC ON (TGT.QueryId=SRC.QueryId AND SRC.ObjectType ='Tab'
+		AND (SRC.ObjectTableName <> TGT.ObjectTableName
+		OR SRC.ObjectDatabaseName <> TGT.ObjectDatabaseName)
+		AND SRC.Logdate >= current_date - 10
+			)
+	 JOIN CLARITY_DBA_MAINT.CLARITY_UPG_CHG_LIST SRC_CHG ON
+				  SRC_CHG.UPG_TABLE_NAME=SRC.ObjectTableName  AND
+				  SRC_CHG.PROD_DB=SRC.ObjectDatabaseName AND
+				  SRC_CHG.CHANGE_TYPE IN ('Column Datatype difference','Column Add') AND
+				  SRC_CHG.RUN_ID=MY_RUN_ID
+
+	 WHERE TGT.ObjectType = 'Tab'
+	  AND TGT.ObjectDatabaseName IN ( 'MY_MATVIEW_DB1' , 'MY_MATVIEW_DB2')
+
+	GROUP BY 1,2,3,4,5,6
+	
+	
+	)
+	WITH DATA
+	ON COMMIT PRESERVE ROWS;
+
+
+	--SELECT ( 'SCRIPT FOUND MAT VIEW IMPACT' || '|' || TRIM(SRC_DB) || '|' || TRIM(SRC_TAB) || '|' ||  TRIM(TGT_DB) || '|' || TRIM(TGT_TAB) || '|' || TRIM(CHANGE_TYPE) || '|' || TRIM(UserName)  || '|' || TRIM(QueryID) ) AS QRY_RESULT 
+	--FROM IMPACT_LIST
+	--ORDER BY 1;
+	
+
+	SELECT 'ANALYZE THESE MATERIALIZED VIEW QUERIES - '  AS ACTION_ITEM;
+
+	SELECT DISTINCT
+	(TRIM(IMPACT_LIST.SRC_DB) || '|' || TRIM(IMPACT_LIST.SRC_TAB) || '|' || TRIM(IMPACT_LIST.TGT_DB) || '|' || TRIM(IMPACT_LIST.TGT_TAB) || '|' || TRIM(IMPACT_LIST.CHANGE_TYPE) || '|' || TRIM(IMPACT_LIST.UserName) || '|' || TRIM(TRAILING '.' FROM TRIM(QUERYID))  ) AS IMPACT_OBJECTS,
+	RANK() OVER (PARTITION BY  QUERYID ORDER BY  SRC_DB, SRC_TAB,TGT_DB,TGT_TAB) AS RNK,
+	 'SELECT SQLTextInfo from  PDCRINFO.DBQLSQLTbl_Hst WHERE QueryId = ' || TRIM(TRAILING '.' FROM TRIM(QUERYID)) AS ANALYSIS_QUERY
+	 FROM  IMPACT_LIST
+	 ORDER BY 3,2,1;
+
