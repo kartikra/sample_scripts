@@ -1,5 +1,4 @@
 # scripting_projects
-scripts in bash,sql and shell
 
 This was my first project using git and python. git_commands.txt has some basic git commands to get started
 Besides this there are 4 other folders -
